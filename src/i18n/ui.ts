@@ -31,24 +31,8 @@ const strings = {
   // Theme
   'theme.toggleLabel': 'Cambiar tema',
 
-  // Table of Contents
-  'toc.summary': 'En esta página',
-  'toc.itemsLabel': 'elementos',
-
   // Accessibility
   'a11y.skipToContent': 'Saltar al contenido',
-
-  // Search
-  'search.label': 'Buscar',
-  'search.placeholder': 'Buscar pipelines…',
-  'search.openAriaLabel': 'Abrir búsqueda',
-  'search.dialogAriaLabel': 'Buscar pipelines',
-  'search.empty': 'Escribe para buscar pipelines.',
-  'search.noResults': 'Sin resultados para',
-  'search.resultsLabel': 'resultados',
-  'search.hintNavigate': 'navegar',
-  'search.hintSelect': 'abrir',
-  'search.hintClose': 'cerrar',
 } as const;
 
 export type UiKey = keyof typeof strings;
