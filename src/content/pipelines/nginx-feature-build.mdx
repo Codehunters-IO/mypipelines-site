@@ -1,0 +1,33 @@
+---
+title: "Nginx Feature Build"
+slug: "nginx-feature-build"
+stack: "nginx"
+kind: "caller"
+type: "build"
+triggers: ["push"]
+description: "Template: Build on feature/bugfix branches Copy to: .github/workflows/feature-build.yml Triggers on every push to feature/* or bugfix/* branches Runs: image build + nginx -t (fast feedback)"
+sourcePath: "templates/nginx-feature-build.yml"
+---
+
+```yaml title="templates/nginx-feature-build.yml"
+# Template: Build on feature/bugfix branches
+# Copy to: .github/workflows/feature-build.yml
+#
+# Triggers on every push to feature/* or bugfix/* branches
+# Runs: image build + nginx -t (fast feedback)
+
+name: Feature/Bugfix Build
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'bugfix/**'
+
+jobs:
+  build:
+    uses: <org>/ci-templates/.github/workflows/nginx-main-pipeline.yml@main
+    with:
+      run_build: true
+    secrets: inherit
+```

@@ -1,0 +1,41 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { STACK_ORDER, STACK_LABELS } from '../lib/stacks';
+import { defaultLocale, t } from '../i18n/ui';
+
+const lang = defaultLocale;
+const all = await getCollection('pipelines');
+const counts = Object.fromEntries(
+  STACK_ORDER.map((s) => [s, all.filter((e) => e.data.stack === s).length])
+);
+---
+
+<BaseLayout title={t(lang, 'site.title')} lang={lang}>
+  <main class="mx-auto max-w-5xl px-4 py-16">
+    <section class="text-center">
+      <h1 class="text-fluid-h1 font-bold tracking-tight text-[var(--fg)]">Pipelines CI/CD listos para copiar</h1>
+      <p class="mx-auto mt-4 max-w-2xl text-lg text-[var(--fg-muted)]">
+        Workflows reutilizables de GitHub Actions por stack, con GitFlow, security gates y deploy.
+        Copiá el caller de tu stack, reemplazá <code>&lt;org&gt;</code> y andá.
+      </p>
+    </section>
+
+    <section class="mt-12">
+      <div class="rounded-lg border border-[var(--border-subtle)] surface p-4 font-mono text-sm">
+        <p class="text-[var(--fg-muted)]"># .github/workflows/main-deploy.yml</p>
+        <p>uses: &lt;org&gt;/ci-templates/.github/workflows/java-main-pipeline.yml@v1</p>
+      </div>
+    </section>
+
+    <section class="mt-12 grid grid-cols-2 md:grid-cols-3 gap-4">
+      {STACK_ORDER.map((s) => (
+        <a href={`/stacks/${s}`}
+           class="rounded-lg border border-[var(--border-subtle)] surface p-6 hover:border-brand-500 transition-colors">
+          <h2 class="font-semibold text-[var(--fg)]">{STACK_LABELS[s]}</h2>
+          <p class="mt-1 text-sm text-[var(--fg-muted)]">{counts[s]} pipelines</p>
+        </a>
+      ))}
+    </section>
+  </main>
+</BaseLayout>

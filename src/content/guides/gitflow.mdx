@@ -1,0 +1,15 @@
+---
+title: "Modelo GitFlow"
+slug: "gitflow"
+order: 2
+description: "Cómo las etapas de GitFlow (feature, PR, develop, release, main) mapean a cada pipeline."
+---
+
+# Modelo GitFlow
+
+| Etapa | Trigger | Pipeline | Hace |
+|-------|---------|----------|------|
+| feature/PR | push feature/*, PR→develop | `*-pr-pipeline` | build→test→coverage→security |
+| develop | push→develop | `*-main-pipeline` | build→artifact→deploy(dev)→release PR |
+| release | push release/* | `*-main-pipeline` | build→artifact→deploy(staging) |
+| main | push→main | `*-main-pipeline` | build→artifact→deploy(prod)→tag+release |

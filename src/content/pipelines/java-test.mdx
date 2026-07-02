@@ -1,0 +1,551 @@
+---
+title: "Java Test"
+slug: "java-test"
+stack: "java"
+kind: "reusable"
+type: "test"
+triggers: ["workflow_call"]
+description: "Java - Test"
+sourcePath: ".github/workflows/java-test.yml"
+---
+
+```yaml title=".github/workflows/java-test.yml"
+name: Java - Test
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'Runner type'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      java_version:
+        description: 'Java version'
+        required: false
+        type: string
+        default: '21'
+      java_distribution:
+        description: 'Java distribution'
+        required: false
+        type: string
+        default: 'temurin'
+      run_coverage:
+        description: 'Run JaCoCo coverage report'
+        required: false
+        type: boolean
+        default: true
+      coverage_instruction_threshold:
+        description: 'Minimum instruction coverage percentage (0-100). Set to 0 to disable. Requires jacocoLogCodeCoverage task.'
+        required: false
+        type: number
+        default: 0
+      coverage_branch_threshold:
+        description: 'Minimum branch coverage percentage (0-100). Set to 0 to disable. Requires jacocoLogCodeCoverage task.'
+        required: false
+        type: number
+        default: 0
+      coverage_line_threshold:
+        description: 'Minimum line coverage percentage (0-100). Set to 0 to disable.'
+        required: false
+        type: number
+        default: 0
+      run_code_analysis:
+        description: 'Run code analysis'
+        required: false
+        type: boolean
+        default: false
+      code_analysis_tool:
+        description: 'Code analysis tool: sonar or qodana'
+        required: false
+        type: string
+        default: 'sonar'
+      skip_quality_gate:
+        description: 'Skip Quality Gate check'
+        required: false
+        type: boolean
+        default: false
+      run_owasp:
+        description: 'Run OWASP Dependency Check'
+        required: false
+        type: boolean
+        default: false
+      owasp_fail_on_cvss:
+        description: 'CVSS score threshold to fail build (7 = HIGH+CRITICAL, 9 = CRITICAL only)'
+        required: false
+        type: number
+        default: 7
+      upload_reports:
+        description: 'Upload test reports as artifact'
+        required: false
+        type: boolean
+        default: false
+      upload_artifact:
+        description: 'Upload build artifact (JAR)'
+        required: false
+        type: boolean
+        default: true
+      jar_path:
+        description: 'Path to search for JAR files'
+        required: false
+        type: string
+        default: 'bootstrap/build/libs'
+      artifact_retention_days:
+        description: 'Days to retain uploaded artifact'
+        required: false
+        type: number
+        default: 1
+      disable_artifacts:
+        description: 'Disable all artifact uploads'
+        required: false
+        type: boolean
+        default: true
+      build_tool:
+        description: 'Build tool: gradle or maven'
+        required: false
+        type: string
+        default: 'gradle'
+
+    outputs:
+      result:
+        description: 'Test result (success/failure)'
+        value: ${{ jobs.test.outputs.result }}
+      coverage_percentage:
+        description: 'Code coverage percentage (line)'
+        value: ${{ jobs.test.outputs.coverage }}
+      coverage_instruction:
+        description: 'Instruction coverage percentage (from jacocoLogCodeCoverage)'
+        value: ${{ jobs.test.outputs.coverage_instruction }}
+      coverage_branch:
+        description: 'Branch coverage percentage (from jacocoLogCodeCoverage)'
+        value: ${{ jobs.test.outputs.coverage_branch }}
+      tests_passed:
+        description: 'Number of tests passed'
+        value: ${{ jobs.test.outputs.passed }}
+      tests_failed:
+        description: 'Number of tests failed'
+        value: ${{ jobs.test.outputs.failed }}
+      tests_skipped:
+        description: 'Number of tests skipped'
+        value: ${{ jobs.test.outputs.skipped }}
+      quality_gate_status:
+        description: 'SonarQube Quality Gate status (OK/ERROR)'
+        value: ${{ jobs.test.outputs.quality_gate }}
+      artifact_name:
+        description: 'Name of uploaded artifact'
+        value: ${{ jobs.test.outputs.artifact_name }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+
+    outputs:
+      result: ${{ steps.test-run.outcome }}
+      coverage: ${{ steps.coverage.outputs.percentage }}
+      coverage_instruction: ${{ steps.jacoco-log.outputs.instruction_pct }}
+      coverage_branch: ${{ steps.jacoco-log.outputs.branch_pct }}
+      quality_gate: ${{ steps.quality-gate.outputs.quality-gate-status }}
+      passed: ${{ steps.test-summary.outputs.passed }}
+      failed: ${{ steps.test-summary.outputs.failed }}
+      skipped: ${{ steps.test-summary.outputs.skipped }}
+      artifact_name: ${{ steps.artifact-info.outputs.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK ${{ inputs.java_version }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+
+      - name: Setup Gradle
+        if: inputs.build_tool == 'gradle'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      # ============================================
+      # RUN TESTS
+      # ============================================
+      - name: Run tests (Gradle)
+        id: test-run
+        if: inputs.build_tool == 'gradle'
+        env:
+          GH_PACKAGES_USERNAME: ${{ secrets.GH_PACKAGES_USERNAME }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+        run: ./gradlew clean build test jacocoTestReport --no-daemon --build-cache --parallel || true
+
+      - name: Run tests (Maven)
+        id: test-run-maven
+        if: inputs.build_tool == 'maven'
+        env:
+          GH_PACKAGES_USERNAME: ${{ secrets.GH_PACKAGES_USERNAME }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+        run: mvn clean verify -B || true
+
+      # ============================================
+      # SONAR ANALYSIS (optional)
+      # ============================================
+      - name: Run SonarQube Analysis (Gradle)
+        if: inputs.run_code_analysis && inputs.code_analysis_tool == 'sonar' && inputs.build_tool == 'gradle'
+        env:
+          GH_PACKAGES_USERNAME: ${{ secrets.GH_PACKAGES_USERNAME }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ./gradlew sonar \
+            -Dsonar.token="${SONAR_TOKEN}" \
+            --no-daemon --build-cache
+
+      - name: Run SonarQube Analysis (Maven)
+        if: inputs.run_code_analysis && inputs.code_analysis_tool == 'sonar' && inputs.build_tool == 'maven'
+        env:
+          GH_PACKAGES_USERNAME: ${{ secrets.GH_PACKAGES_USERNAME }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.token="${SONAR_TOKEN}" \
+            -B
+
+      - name: SonarQube Quality Gate
+        id: quality-gate
+        if: inputs.run_code_analysis && inputs.code_analysis_tool == 'sonar' && !inputs.skip_quality_gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          # Gradle: build/sonar/ | Maven/CLI: .scannerwork/
+          REPORT_FILE=$(find . -name "report-task.txt" \( -path "*/build/sonar/*" -o -path "*/.scannerwork/*" \) 2>/dev/null | head -1)
+
+          if [ -z "$REPORT_FILE" ]; then
+            echo "::warning::No report-task.txt found, listing build directories for debug:"
+            find . -type d -name "sonar" -o -type d -name ".scannerwork" 2>/dev/null || true
+            echo "::error::Cannot check Quality Gate without report-task.txt"
+            exit 1
+          fi
+
+          echo "Found report: $REPORT_FILE"
+          cat "$REPORT_FILE"
+
+          # Extract ceTaskId, server URL, and dashboard URL from report
+          CE_TASK_ID=$(grep "ceTaskId=" "$REPORT_FILE" | cut -d'=' -f2)
+          SERVER_URL=$(grep "serverUrl=" "$REPORT_FILE" | cut -d'=' -f2)
+          DASHBOARD_URL=$(grep "dashboardUrl=" "$REPORT_FILE" | cut -d'=' -f2-)
+
+          if [ -z "$CE_TASK_ID" ]; then
+            echo "::error::ceTaskId not found in report-task.txt"
+            exit 1
+          fi
+
+          echo "Waiting for analysis task $CE_TASK_ID to complete..."
+
+          # Poll CE task status (max 5 min)
+          for i in $(seq 1 30); do
+            TASK_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
+              "${SERVER_URL}/api/ce/task?id=${CE_TASK_ID}" \
+              | jq -r '.task.status // empty')
+
+            echo "  Attempt $i/30 - task status: $TASK_STATUS"
+
+            if [ "$TASK_STATUS" = "SUCCESS" ]; then
+              break
+            elif [ "$TASK_STATUS" = "FAILED" ] || [ "$TASK_STATUS" = "CANCELED" ]; then
+              echo "::error::SonarQube analysis task $TASK_STATUS"
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+          if [ "$TASK_STATUS" != "SUCCESS" ]; then
+            echo "::error::Timed out waiting for SonarQube analysis"
+            exit 1
+          fi
+
+          # Get Quality Gate status
+          ANALYSIS_ID=$(curl -s -u "${SONAR_TOKEN}:" \
+            "${SERVER_URL}/api/ce/task?id=${CE_TASK_ID}" \
+            | jq -r '.task.analysisId')
+
+          QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+            "${SERVER_URL}/api/qualitygates/project_status?analysisId=${ANALYSIS_ID}")
+
+          STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status')
+
+          echo "quality-gate-status=$STATUS" >> $GITHUB_OUTPUT
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### SonarQube Quality Gate" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$STATUS" = "OK" ]; then
+            echo "**Quality Gate: PASSED** — [View in SonarQube]($DASHBOARD_URL)" >> $GITHUB_STEP_SUMMARY
+          else
+            # Extract failed conditions with details
+            FAILED_CONDITIONS=$(echo "$QG_RESPONSE" | jq -r '
+              .projectStatus.conditions[]
+              | select(.status == "ERROR")
+              | "| \(.metricKey) | \(.actualValue) | \(.errorThreshold) |"
+            ')
+
+            echo "**Quality Gate: FAILED**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Failed Conditions" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Actual | Threshold |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|--------|-----------|" >> $GITHUB_STEP_SUMMARY
+            echo "$FAILED_CONDITIONS" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "[View details in SonarQube]($DASHBOARD_URL)" >> $GITHUB_STEP_SUMMARY
+
+            echo "::error::Quality Gate FAILED — See details: $DASHBOARD_URL"
+            echo "Failed conditions:"
+            echo "$QG_RESPONSE" | jq -r '
+              .projectStatus.conditions[]
+              | select(.status == "ERROR")
+              | "  \(.metricKey): \(.actualValue) (threshold: \(.errorThreshold))"
+            '
+            exit 1
+          fi
+
+      - name: JaCoCo Log Code Coverage
+        id: jacoco-log
+        if: inputs.run_coverage && always()
+        run: |
+          # Check if the jacocoLogCodeCoverage task exists in the project
+          if ./gradlew tasks --all 2>/dev/null | grep -q "jacocoLogCodeCoverage"; then
+            echo "Running jacocoLogCodeCoverage..."
+            LOG_OUTPUT=$(./gradlew jacocoLogCodeCoverage --no-daemon --build-cache 2>&1) || true
+            echo "$LOG_OUTPUT"
+
+            # Parse TOTAL line to extract coverage percentages
+            TOTAL_LINE=$(echo "$LOG_OUTPUT" | grep -E "^\s*TOTAL" | head -1)
+            if [ -n "$TOTAL_LINE" ]; then
+              INSTRUCTION_PCT=$(echo "$TOTAL_LINE" | awk '{print $2}' | sed 's/%//')
+              BRANCH_PCT=$(echo "$TOTAL_LINE" | awk '{print $3}' | sed 's/%//')
+              LINE_PCT=$(echo "$TOTAL_LINE" | awk '{print $4}' | sed 's/%//')
+
+              echo "instruction_pct=$INSTRUCTION_PCT" >> $GITHUB_OUTPUT
+              echo "branch_pct=$BRANCH_PCT" >> $GITHUB_OUTPUT
+              echo "line_pct=$LINE_PCT" >> $GITHUB_OUTPUT
+              echo "has_log=true" >> $GITHUB_OUTPUT
+
+              # Write coverage summary to job summary
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### JaCoCo Code Coverage Summary" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+
+              # Extract module lines (between header separator and TOTAL separator)
+              echo "| Module | Instruction% | Branch% | Line% |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------------|---------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "$LOG_OUTPUT" | awk '/JaCoCo Code Coverage Summary/{found=1; next} found && /^[[:space:]]*-+/{count++; next} found && count>=2 && !/^[[:space:]]*-+/ && !/^[[:space:]]*Module/ && NF>=4 {printf "| %s | %s | %s | %s |\n", $1, $2, $3, $4}' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "has_log=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "jacocoLogCodeCoverage task not found, skipping."
+            echo "has_log=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Parse test results
+        id: test-summary
+        if: always()
+        run: |
+          PASSED=0
+          FAILED=0
+          SKIPPED=0
+
+          # Search in both Gradle and Maven output directories
+          for dir in "build/test-results" "target/surefire-reports"; do
+            if [ -d "$dir" ]; then
+              for file in $(find "$dir" -name "*.xml" 2>/dev/null); do
+                if [ -f "$file" ]; then
+                  FILE_TESTS=$(grep -oP 'tests="\K[0-9]+' "$file" 2>/dev/null | head -1 || echo "0")
+                  FILE_FAILURES=$(grep -oP 'failures="\K[0-9]+' "$file" 2>/dev/null | head -1 || echo "0")
+                  FILE_ERRORS=$(grep -oP 'errors="\K[0-9]+' "$file" 2>/dev/null | head -1 || echo "0")
+                  FILE_SKIPPED=$(grep -oP 'skipped="\K[0-9]+' "$file" 2>/dev/null | head -1 || echo "0")
+
+                  TOTAL_FAILED=$((FILE_FAILURES + FILE_ERRORS))
+                  FILE_PASSED=$((FILE_TESTS - TOTAL_FAILED - FILE_SKIPPED))
+
+                  PASSED=$((PASSED + FILE_PASSED))
+                  FAILED=$((FAILED + TOTAL_FAILED))
+                  SKIPPED=$((SKIPPED + FILE_SKIPPED))
+                fi
+              done
+            fi
+          done
+
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+          echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
+
+          TOTAL=$((PASSED + FAILED + SKIPPED))
+          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Skipped | $SKIPPED |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total** | **$TOTAL** |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Publish JaCoCo Report
+        if: inputs.run_coverage && always()
+        uses: madrapps/jacoco-report@v1.7.1
+        with:
+          paths: ${{ github.workspace }}/**/build/reports/jacoco/test/jacocoTestReport.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: ${{ inputs.coverage_line_threshold }}
+          min-coverage-changed-files: ${{ inputs.coverage_line_threshold }}
+          title: "Code Coverage Report"
+          update-comment: true
+
+      - name: Parse coverage report
+        id: coverage
+        if: inputs.run_coverage && always()
+        run: |
+          TOTAL_MISSED=0
+          TOTAL_COVERED=0
+
+          # Find all JaCoCo CSV reports (supports multi-module projects)
+          CSV_FILES=$(find . -path "*/jacoco/*.csv" -name "*.csv" 2>/dev/null)
+
+          if [ -z "$CSV_FILES" ]; then
+            echo "::warning::No JaCoCo CSV reports found"
+            echo "percentage=0" >> $GITHUB_OUTPUT
+            echo "### Code Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "**Line Coverage: 0%** (no reports found)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          echo "=== JaCoCo Coverage Report ==="
+          echo ""
+
+          while IFS= read -r CSV_FILE; do
+            MODULE=$(echo "$CSV_FILE" | sed 's|^\./||;s|/build/.*||')
+            MISSED=$(awk -F',' 'NR>1 {sum+=$8} END {print sum+0}' "$CSV_FILE" 2>/dev/null)
+            COVERED=$(awk -F',' 'NR>1 {sum+=$9} END {print sum+0}' "$CSV_FILE" 2>/dev/null)
+            TOTAL=$((MISSED + COVERED))
+
+            if [ "$TOTAL" -gt 0 ]; then
+              MOD_COV=$(awk "BEGIN {printf \"%.1f\", ($COVERED / $TOTAL) * 100}")
+              echo "  $MODULE: ${MOD_COV}% (${COVERED}/${TOTAL} lines)"
+            fi
+
+            TOTAL_MISSED=$((TOTAL_MISSED + MISSED))
+            TOTAL_COVERED=$((TOTAL_COVERED + COVERED))
+          done <<< "$CSV_FILES"
+
+          COVERAGE=0
+          if [ "$((TOTAL_MISSED + TOTAL_COVERED))" -gt 0 ]; then
+            COVERAGE=$(awk "BEGIN {printf \"%.1f\", ($TOTAL_COVERED / ($TOTAL_MISSED + $TOTAL_COVERED)) * 100}")
+          fi
+
+          echo ""
+          echo "  Total: ${COVERAGE}% (${TOTAL_COVERED}/$((TOTAL_MISSED + TOTAL_COVERED)) lines)"
+          echo "================================"
+
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Code Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "**Line Coverage: ${COVERAGE}%**" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check coverage threshold
+        if: inputs.run_coverage && always()
+        run: |
+          FAILED=false
+          COVERAGE_THRESHOLD=${{ inputs.coverage_line_threshold }}
+          COVERAGE="${{ steps.coverage.outputs.percentage }}"
+
+          # Always print line coverage
+          echo "Line coverage: ${COVERAGE}%"
+
+          # Validate only if threshold > 0
+          if [ "$COVERAGE_THRESHOLD" -gt 0 ] && [ "$(echo "$COVERAGE < $COVERAGE_THRESHOLD" | bc -l)" -eq 1 ]; then
+            echo "::error::Line coverage ${COVERAGE}% is below threshold of ${COVERAGE_THRESHOLD}%"
+            FAILED=true
+          fi
+
+          # Check instruction coverage threshold (from jacocoLogCodeCoverage)
+          if [ "${{ inputs.coverage_instruction_threshold }}" -gt 0 ] && [ "${{ steps.jacoco-log.outputs.has_log }}" = "true" ]; then
+            INSTR="${{ steps.jacoco-log.outputs.instruction_pct }}"
+            INSTR_THRESHOLD="${{ inputs.coverage_instruction_threshold }}"
+            if [ "$(echo "$INSTR < $INSTR_THRESHOLD" | bc -l)" -eq 1 ]; then
+              echo "::error::Instruction coverage ${INSTR}% is below threshold of ${INSTR_THRESHOLD}%"
+              FAILED=true
+            fi
+          fi
+
+          # Check branch coverage threshold (from jacocoLogCodeCoverage)
+          if [ "${{ inputs.coverage_branch_threshold }}" -gt 0 ] && [ "${{ steps.jacoco-log.outputs.has_log }}" = "true" ]; then
+            BRANCH="${{ steps.jacoco-log.outputs.branch_pct }}"
+            BRANCH_THRESHOLD="${{ inputs.coverage_branch_threshold }}"
+            if [ "$(echo "$BRANCH < $BRANCH_THRESHOLD" | bc -l)" -eq 1 ]; then
+              echo "::error::Branch coverage ${BRANCH}% is below threshold of ${BRANCH_THRESHOLD}%"
+              FAILED=true
+            fi
+          fi
+
+          if [ "$FAILED" = "true" ]; then
+            echo "::error::Coverage quality gate failed. See details above."
+            exit 1
+          fi
+
+      - name: Check test results
+        if: always()
+        run: |
+          FAILED="${{ steps.test-summary.outputs.failed }}"
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED test(s) failed"
+            exit 1
+          fi
+
+      # ============================================
+      # UPLOAD REPORTS
+      # ============================================
+      - name: Check if Karate reports exist
+        id: check-karate
+        if: inputs.upload_reports && !inputs.disable_artifacts && always()
+        run: |
+          if [ -d "build/karate-reports" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload test reports
+        if: inputs.upload_reports && !inputs.disable_artifacts && always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-reports-${{ github.run_id }}
+          path: |
+            build/reports/tests/
+            build/karate-reports/
+            target/surefire-reports/
+          retention-days: 7
+
+      # ============================================
+      # UPLOAD BUILD ARTIFACT (JAR)
+      # ============================================
+      - name: Get artifact info
+        id: artifact-info
+        if: inputs.upload_artifact && !inputs.disable_artifacts
+        run: |
+          JAR_FILE=$(find ${{ inputs.jar_path }} -name "*.jar" -not -name "*-plain.jar" | head -1)
+          echo "path=$JAR_FILE" >> $GITHUB_OUTPUT
+          echo "name=build-artifact-${{ github.run_id }}" >> $GITHUB_OUTPUT
+
+      - name: Upload build artifact
+        if: inputs.upload_artifact && !inputs.disable_artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.artifact-info.outputs.name }}
+          path: ${{ inputs.jar_path }}/*.jar
+          retention-days: ${{ inputs.artifact_retention_days }}
+```

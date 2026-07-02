@@ -1,0 +1,42 @@
+---
+import { t } from '../i18n/ui';
+import type { Locale } from '../i18n/ui';
+import { REPO_URL, GITHUB_URL, LINKEDIN_URL } from '../lib/site';
+
+interface Props {
+  lang: Locale;
+}
+const { lang } = Astro.props;
+
+const guidesHref = '/guides';
+const year = new Date().getFullYear();
+---
+
+<footer
+  data-pagefind-ignore="all"
+  class="mt-20 border-t border-[var(--border-subtle)] surface-sunken"
+>
+  <div class="mx-auto max-w-7xl px-4 py-10">
+    <div class="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+      <div class="max-w-sm">
+        <span class="inline-flex items-center gap-2 font-mono text-sm font-semibold tracking-tight text-[var(--fg)]">
+          <span aria-hidden="true" class="h-2 w-2 rounded-full bg-brand-500"></span>
+          {t(lang, 'home.title')}
+        </span>
+        <p class="mt-2 text-sm text-[var(--fg-muted)]">{t(lang, 'footer.tagline')}</p>
+      </div>
+
+      <nav class="flex flex-col gap-2 text-sm" aria-label="Footer">
+        <a href={guidesHref} class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">{t(lang, 'footer.guides')}</a>
+        <a href={REPO_URL} target="_blank" rel="noopener" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">{t(lang, 'footer.repo')}</a>
+        <a href={GITHUB_URL} target="_blank" rel="noopener" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">GitHub</a>
+        <a href={LINKEDIN_URL} target="_blank" rel="noopener" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">LinkedIn</a>
+      </nav>
+    </div>
+
+    <div class="mt-8 flex flex-col gap-1 border-t border-[var(--border-subtle)] pt-6 text-xs text-[var(--fg-subtle)] sm:flex-row sm:items-center sm:justify-between">
+      <span>© {year} Andrés Montoya · <span class="font-mono font-semibold tracking-tight">Codehunters</span></span>
+      <span class="font-mono">{t(lang, 'footer.builtWith')}</span>
+    </div>
+  </div>
+</footer>

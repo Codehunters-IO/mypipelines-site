@@ -1,0 +1,32 @@
+---
+import { t, type Locale } from '../i18n/ui';
+import { STACK_LABELS, type Stack } from '../lib/stacks';
+
+interface Props {
+  category: Stack;
+  title: string;
+  lang: Locale;
+}
+const { category, title, lang } = Astro.props;
+
+const SEP = '›'; // U+203A SINGLE RIGHT-POINTING ANGLE QUOTATION MARK (D2-06)
+const homeHref = '/';
+---
+
+<nav
+  aria-label="breadcrumb"
+  data-pagefind-ignore="all"
+  class="mx-auto max-w-7xl px-4 py-3 text-sm text-[var(--fg-muted)]"
+>
+  <ol class="flex flex-wrap items-center gap-1.5">
+    <li><a href={homeHref} class="transition-colors hover:text-[var(--fg)]">{t(lang, 'breadcrumb.home')}</a></li>
+    <li aria-hidden="true" class="text-[var(--fg-subtle)]">{SEP}</li>
+    <li>
+      <a href={`/stacks/${category}`} class="transition-colors hover:text-[var(--fg)]">
+        {STACK_LABELS[category]}
+      </a>
+    </li>
+    <li aria-hidden="true" class="text-[var(--fg-subtle)]">{SEP}</li>
+    <li aria-current="page" class="font-medium text-[var(--fg)]">{title}</li>
+  </ol>
+</nav>

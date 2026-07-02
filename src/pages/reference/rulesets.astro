@@ -1,0 +1,22 @@
+---
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { defaultLocale } from '../../i18n/ui';
+
+const lang = defaultLocale;
+const all = await getCollection('pipelines');
+const refs = all.filter((e) => e.data.kind === 'ruleset' || e.data.kind === 'codeowners').sort((a, b) => a.data.title.localeCompare(b.data.title));
+const rendered = await Promise.all(refs.map(async (e) => ({ d: e.data, Content: (await render(e)).Content })));
+---
+<BaseLayout title="Rulesets & CODEOWNERS" lang={lang}>
+  <main class="mx-auto max-w-4xl px-4 py-10" data-pagefind-body>
+    <h1 class="text-fluid-h1 font-bold text-[var(--fg)]">Rulesets & CODEOWNERS</h1>
+    {rendered.map(({ d, Content }) => (
+      <section class="mt-8">
+        <h2 class="text-2xl font-bold text-[var(--fg)]">{d.title}</h2>
+        <p class="text-sm text-[var(--fg-muted)]">{d.description}</p>
+        <article class="prose prose-slate dark:prose-invert max-w-none mt-2"><Content /></article>
+      </section>
+    ))}
+  </main>
+</BaseLayout>

@@ -1,0 +1,381 @@
+---
+title: "React Main Pipeline"
+slug: "react-main-pipeline"
+stack: "react"
+kind: "reusable"
+type: "pipeline"
+triggers: ["workflow_call"]
+description: "React - Main Pipeline"
+sourcePath: ".github/workflows/react-main-pipeline.yml"
+---
+
+```yaml title=".github/workflows/react-main-pipeline.yml"
+name: React - Main Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      # Runner configuration
+      runner:
+        description: 'Runner type'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+      # Node configuration
+      node_version:
+        description: 'Node.js version'
+        required: false
+        type: string
+        default: '24'
+      package_manager:
+        description: 'Package manager (npm or yarn)'
+        required: false
+        type: string
+        default: 'yarn'
+
+      # Pipeline steps control
+      run_commit_lint:
+        description: 'Run commit message validation'
+        required: false
+        type: boolean
+        default: false
+      run_trufflehog:
+        description: 'Run TruffleHog secret scanning'
+        required: false
+        type: boolean
+        default: false
+      trufflehog_only_verified:
+        description: 'Only report verified secrets'
+        required: false
+        type: boolean
+        default: true
+      trufflehog_fail_on_findings:
+        description: 'Fail the workflow if secrets are found'
+        required: false
+        type: boolean
+        default: true
+      run_dependency_review:
+        description: 'Run dependency review (PR only)'
+        required: false
+        type: boolean
+        default: false
+      dependency_review_severity:
+        description: 'Minimum severity to fail: low, moderate, high, critical'
+        required: false
+        type: string
+        default: 'high'
+      run_build:
+        description: 'Run build job'
+        required: false
+        type: boolean
+        default: true
+      run_test:
+        description: 'Run test job (includes coverage)'
+        required: false
+        type: boolean
+        default: false
+      run_code_analysis:
+        description: 'Run code analysis (requires run_test: true)'
+        required: false
+        type: boolean
+        default: false
+      code_analysis_tool:
+        description: 'Code analysis tool: sonar or qodana'
+        required: false
+        type: string
+        default: 'sonar'
+      skip_quality_gate:
+        description: 'Skip Quality Gate check'
+        required: false
+        type: boolean
+        default: false
+      run_deploy:
+        description: 'Run deployment'
+        required: false
+        type: boolean
+        default: false
+      deploy_target:
+        description: 'Deploy target: s3 or amplify'
+        required: false
+        type: string
+        default: 's3'
+      run_create_issue_on_failure:
+        description: 'Create GitHub issue on pipeline failure'
+        required: false
+        type: boolean
+        default: false
+      issue_labels:
+        description: 'Labels for the failure issue (comma-separated)'
+        required: false
+        type: string
+        default: 'bug,pipeline-failure'
+      run_notifications:
+        description: 'Send notifications after pipeline completes'
+        required: false
+        type: boolean
+        default: false
+      notify_providers:
+        description: 'Notification providers (comma-separated: slack, teams)'
+        required: false
+        type: string
+        default: 'slack'
+      notify_mention_on_failure:
+        description: 'Mention on failure (Slack: @channel, Teams: @General)'
+        required: false
+        type: string
+        default: ''
+      run_cleanup:
+        description: 'Delete merged branch after deploy'
+        required: false
+        type: boolean
+        default: false
+      run_release:
+        description: 'Create release PR after deploy'
+        required: false
+        type: boolean
+        default: false
+
+      # Build options
+      build_command:
+        description: 'Build script name (yarn <command>)'
+        required: false
+        type: string
+        default: 'build'
+      build_output_dir:
+        description: 'Build output directory (build for CRA, dist for Vite)'
+        required: false
+        type: string
+        default: 'build'
+      run_lint:
+        description: 'Run yarn lint during build'
+        required: false
+        type: boolean
+        default: true
+      run_type_check:
+        description: 'Run yarn type-check during build (TypeScript projects)'
+        required: false
+        type: boolean
+        default: false
+
+      # Test options
+      test_command:
+        description: 'Test script name (yarn <command>)'
+        required: false
+        type: string
+        default: 'test'
+
+      # Deploy options
+      environment:
+        description: 'GitHub environment (develop, staging, production)'
+        required: false
+        type: string
+        default: 'develop'
+
+      # Release options
+      release_target_branch:
+        description: 'Target branch for release PR'
+        required: false
+        type: string
+        default: 'main'
+      release_strict_flow:
+        description: 'Enforce GitFlow on release PR (base must be develop, target must be main)'
+        required: false
+        type: boolean
+        default: true
+      run_tag:
+        description: 'Create git tag and GitHub Release after deploy'
+        required: false
+        type: boolean
+        default: false
+
+    outputs:
+      coverage:
+        description: 'Code coverage percentage'
+        value: ${{ jobs.test.outputs.coverage_percentage }}
+      deploy_status:
+        description: 'Deployment status'
+        value: ${{ jobs.deploy.outputs.deploy_status }}
+      deleted_branch:
+        description: 'Name of deleted branch'
+        value: ${{ jobs.cleanup.outputs.deleted_branch }}
+      release_version:
+        description: 'Release version created'
+        value: ${{ jobs.release.outputs.version }}
+      release_pr_url:
+        description: 'Release PR URL'
+        value: ${{ jobs.release.outputs.pr_url }}
+      release_changelog:
+        description: 'Release changelog'
+        value: ${{ jobs.release.outputs.changelog }}
+
+jobs:
+  # ============================================
+  # COMMIT LINT (parallel, no deps)
+  # ============================================
+  commit-lint:
+    name: Commit Lint
+    if: inputs.run_commit_lint
+    uses: ./.github/workflows/shared-commit-lint.yml
+    with:
+      runner: ${{ inputs.runner }}
+
+  # ============================================
+  # SECURITY - TruffleHog (parallel, no deps)
+  # ============================================
+  security:
+    name: Security Scan
+    if: inputs.run_trufflehog
+    uses: ./.github/workflows/security-trufflehog.yml
+    with:
+      runner: ${{ inputs.runner }}
+      only_verified: ${{ inputs.trufflehog_only_verified }}
+      fail_on_findings: ${{ inputs.trufflehog_fail_on_findings }}
+    secrets: inherit
+
+  # ============================================
+  # SECURITY - Dependency Review (parallel, no deps)
+  # ============================================
+  dependency-review:
+    name: Dependency Review
+    if: inputs.run_dependency_review
+    uses: ./.github/workflows/security-dependency-review.yml
+    with:
+      runner: ${{ inputs.runner }}
+      fail_on_severity: ${{ inputs.dependency_review_severity }}
+    secrets: inherit
+
+  # ============================================
+  # BUILD
+  # ============================================
+  build:
+    name: Build
+    if: inputs.run_build
+    uses: ./.github/workflows/react-build.yml
+    with:
+      runner: ${{ inputs.runner }}
+      node_version: ${{ inputs.node_version }}
+      package_manager: ${{ inputs.package_manager }}
+      build_command: ${{ inputs.build_command }}
+      build_output_dir: ${{ inputs.build_output_dir }}
+      run_lint: ${{ inputs.run_lint }}
+      run_type_check: ${{ inputs.run_type_check }}
+    secrets: inherit
+
+  # ============================================
+  # TEST & COVERAGE
+  # ============================================
+  test:
+    name: Test & Coverage
+    if: inputs.run_test
+    needs: build
+    uses: ./.github/workflows/react-test.yml
+    with:
+      runner: ${{ inputs.runner }}
+      node_version: ${{ inputs.node_version }}
+      package_manager: ${{ inputs.package_manager }}
+      run_coverage: true
+      test_command: ${{ inputs.test_command }}
+      run_code_analysis: ${{ inputs.run_code_analysis }}
+      code_analysis_tool: ${{ inputs.code_analysis_tool }}
+      skip_quality_gate: ${{ inputs.skip_quality_gate }}
+    secrets: inherit
+
+  # ============================================
+  # DEPLOY - S3 or Amplify
+  # ============================================
+  deploy:
+    name: Deploy (${{ inputs.deploy_target }})
+    if: |
+      inputs.run_deploy &&
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
+    needs: [build, test]
+    uses: ./.github/workflows/react-deploy-${{ inputs.deploy_target }}.yml
+    with:
+      runner: ${{ inputs.runner }}
+      environment: ${{ inputs.environment }}
+      build_output_dir: ${{ inputs.build_output_dir }}
+    secrets: inherit
+
+  # ============================================
+  # RELEASE - Create release PR
+  # ============================================
+  release:
+    name: Create Release
+    if: |
+      inputs.run_release &&
+      always() &&
+      needs.deploy.result == 'success'
+    needs: [deploy]
+    uses: ./.github/workflows/shared-release.yml
+    with:
+      base_branch: ${{ github.ref_name }}
+      target_branch: ${{ inputs.release_target_branch }}
+      strict_flow: ${{ inputs.release_strict_flow }}
+    secrets: inherit
+
+  # ============================================
+  # CLEANUP - Delete merged branch (runs after release PR created)
+  # ============================================
+  cleanup:
+    name: Delete Branch
+    if: |
+      inputs.run_cleanup &&
+      always() &&
+      needs.deploy.result == 'success' &&
+      (needs.release.result == 'success' || needs.release.result == 'skipped')
+    needs: [deploy, release]
+    uses: ./.github/workflows/shared-delete-branch.yml
+    secrets: inherit
+
+  # ============================================
+  # TAG - Create git tag and GitHub Release
+  # ============================================
+  tag:
+    name: Tag Release
+    if: |
+      inputs.run_tag &&
+      always() &&
+      needs.deploy.result == 'success'
+    needs: [build, test, deploy, cleanup, release]
+    uses: ./.github/workflows/shared-tag-release.yml
+    secrets: inherit
+
+  # ============================================
+  # NOTIFY - Notifications (runs last, always)
+  # ============================================
+  notify:
+    name: Notify
+    if: |
+      inputs.run_notifications &&
+      always()
+    needs: [build, test, deploy, cleanup, release, tag]
+    uses: ./.github/workflows/shared-notifications.yml
+    with:
+      providers: ${{ inputs.notify_providers }}
+      status: ${{ (needs.build.result == 'failure' || needs.test.result == 'failure' || needs.deploy.result == 'failure') && 'failure' || (needs.build.result == 'cancelled') && 'cancelled' || 'success' }}
+      environment: ${{ inputs.environment }}
+      version: ${{ needs.release.outputs.version }}
+      changelog: ${{ needs.release.outputs.changelog }}
+      mention_on_failure: ${{ inputs.notify_mention_on_failure }}
+    secrets: inherit
+
+  # ============================================
+  # CREATE ISSUE - On failure (runs last, always)
+  # ============================================
+  create-issue:
+    name: Create Issue
+    if: |
+      inputs.run_create_issue_on_failure &&
+      always()
+    needs: [build, test, deploy, cleanup, release, tag]
+    uses: ./.github/workflows/shared-create-issue-on-failure.yml
+    with:
+      status: ${{ (needs.build.result == 'failure' || needs.test.result == 'failure' || needs.deploy.result == 'failure') && 'failure' || 'success' }}
+      environment: ${{ inputs.environment }}
+      version: ${{ needs.release.outputs.version }}
+      changelog: ${{ needs.release.outputs.changelog }}
+      labels: ${{ inputs.issue_labels }}
+```

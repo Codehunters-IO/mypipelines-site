@@ -1,0 +1,119 @@
+---
+title: "Contracts Build"
+slug: "contracts-build"
+stack: "contracts"
+kind: "reusable"
+type: "build"
+triggers: ["workflow_call"]
+description: "Contracts - Build & Compile"
+sourcePath: ".github/workflows/contracts-build.yml"
+---
+
+```yaml title=".github/workflows/contracts-build.yml"
+name: Contracts - Build & Compile
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'Runner type'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      node_version:
+        description: 'Node.js version'
+        required: false
+        type: string
+        default: '22'
+      package_manager:
+        description: 'Package manager (npm, yarn, or pnpm)'
+        required: false
+        type: string
+        default: 'pnpm'
+      pnpm_version:
+        description: 'pnpm version (used when package_manager: pnpm)'
+        required: false
+        type: string
+        default: '10'
+      run_size_check:
+        description: 'Run hardhat-contract-sizer (strict mode fails if any contract > 24KB)'
+        required: false
+        type: boolean
+        default: true
+      artifact_retention_days:
+        description: 'Days to retain compiled artifacts'
+        required: false
+        type: number
+        default: 1
+
+    outputs:
+      artifact_name:
+        description: 'Name of uploaded build artifact'
+        value: ${{ jobs.build.outputs.artifact_name }}
+
+jobs:
+  build:
+    name: Build & Compile
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 15
+
+    outputs:
+      artifact_name: contracts-build-${{ github.run_id }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        if: inputs.package_manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js ${{ inputs.node_version }}
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: ${{ inputs.package_manager }}
+
+      - name: Install dependencies
+        run: |
+          case "${{ inputs.package_manager }}" in
+            pnpm) pnpm install --frozen-lockfile ;;
+            yarn) yarn install --frozen-lockfile ;;
+            *)    npm ci ;;
+          esac
+
+      - name: Compile contracts
+        run: |
+          case "${{ inputs.package_manager }}" in
+            pnpm) pnpm hardhat compile ;;
+            yarn) yarn hardhat compile ;;
+            *)    npx hardhat compile ;;
+          esac
+
+          echo "### Hardhat Compile" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** Passed" >> $GITHUB_STEP_SUMMARY
+
+      - name: Contract size check
+        if: inputs.run_size_check
+        run: |
+          case "${{ inputs.package_manager }}" in
+            pnpm) pnpm hardhat size-contracts ;;
+            yarn) yarn hardhat size-contracts ;;
+            *)    npx hardhat size-contracts ;;
+          esac
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Contract Sizes" >> $GITHUB_STEP_SUMMARY
+          echo "Strict mode enabled (24KB EIP-170 limit)." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload compiled artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: contracts-build-${{ github.run_id }}
+          path: |
+            artifacts/
+            cache/
+            typechain-types/
+          retention-days: ${{ inputs.artifact_retention_days }}
+          if-no-files-found: warn
+```

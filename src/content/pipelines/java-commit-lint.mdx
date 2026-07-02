@@ -1,0 +1,30 @@
+---
+title: "Java Commit Lint"
+slug: "java-commit-lint"
+stack: "java"
+kind: "reusable"
+type: "lint"
+triggers: ["workflow_call"]
+description: "DEPRECATED: Use shared-commit-lint.yml instead"
+sourcePath: ".github/workflows/java-commit-lint.yml"
+---
+
+```yaml title=".github/workflows/java-commit-lint.yml"
+# DEPRECATED: Use shared-commit-lint.yml instead
+name: "[DEPRECATED] Java - Commit Lint"
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'Runner type'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  lint:
+    uses: ./.github/workflows/shared-commit-lint.yml
+    with:
+      runner: ${{ inputs.runner }}
+```

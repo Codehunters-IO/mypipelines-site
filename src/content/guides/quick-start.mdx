@@ -1,0 +1,26 @@
+---
+title: "Quick Start"
+slug: "quick-start"
+order: 1
+description: "Adoptá los pipelines en tu repo: copiá el caller, reemplazá <org>, configurá secrets."
+---
+
+# Quick Start
+
+1. Copiá los templates de tu stack a `.github/workflows/`.
+2. Reemplazá `<org>` por tu organización de GitHub en cada `uses:`.
+3. Configurá los secrets requeridos (AWS/ECR, EC2 SSH, Slack).
+
+```yaml title=".github/workflows/main-deploy.yml"
+name: Deploy to Production
+on:
+  push:
+    branches: [main]
+jobs:
+  pipeline:
+    uses: <org>/ci-templates/.github/workflows/java-main-pipeline.yml@v1
+    with:
+      deploy_target: 'ec2-vpn'
+      environment: 'prod'
+    secrets: inherit
+```

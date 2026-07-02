@@ -1,0 +1,24 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { defaultLocale } from '../../i18n/ui';
+
+export async function getStaticPaths() {
+  const guides = await getCollection('guides');
+  return guides.map((entry) => ({ params: { slug: entry.data.slug }, props: { entry } }));
+}
+
+interface Props { entry: CollectionEntry<'guides'> }
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+const lang = defaultLocale;
+---
+<BaseLayout title={entry.data.title} lang={lang}>
+  <main class="mx-auto max-w-3xl px-4 py-10" data-pagefind-body>
+    <article class="prose prose-slate dark:prose-invert max-w-none">
+      <Content />
+    </article>
+  </main>
+</BaseLayout>

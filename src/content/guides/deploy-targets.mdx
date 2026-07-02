@@ -1,0 +1,15 @@
+---
+title: "Deploy targets"
+slug: "deploy-targets"
+order: 3
+description: "Valores de deploy_target: ec2, ec2-vpn (WireGuard), eks, s3 — y cuándo usar cada uno."
+---
+
+# Deploy targets
+
+| Valor | Destino |
+|-------|---------|
+| `ec2` | SSH a un EC2 alcanzable directo |
+| `ec2-vpn` | SSH a EC2 privado; el runner levanta un túnel WireGuard, despliega y lo baja |
+| `eks` | Cluster EKS (manifests o Helm) |
+| `s3` | Sitio estático (react/nginx) |
