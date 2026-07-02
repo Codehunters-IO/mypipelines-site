@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { t } from '../i18n/ui';
+
+const lang = 'es';
+---
+
+<BaseLayout title={t(lang, 'site.title')} lang={lang}>
+  <main class="mx-auto max-w-7xl px-4 py-16">
+    <h1 class="text-fluid-h1 font-bold text-[var(--fg)]">{t(lang, 'catalog.title')}</h1>
+    <p class="mt-4 text-[var(--fg-muted)]">{t(lang, 'catalog.subtitle')}</p>
+  </main>
+</BaseLayout>

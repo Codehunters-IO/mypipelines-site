@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+/* ── Fonts (self-hosted, variable, no FOUT) ──────────────────────────────── */
+@import "@fontsource-variable/ibm-plex-sans";
+@import "@fontsource-variable/jetbrains-mono";
+
+/* Tailwind v4 class-based dark mode (overrides default prefers-color-scheme) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Typography plugin for markdown content (prose / prose-invert) */
+@plugin "@tailwindcss/typography";
+
+/* ── Design tokens ───────────────────────────────────────────────────────── */
+@theme {
+  /* Typefaces — Plex Sans body, JetBrains Mono code/labels/wordmark */
+  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Brand (stripe-vibe violet) — promoted from inline literals */
+  --color-brand-50: oklch(0.97 0.014 295);
+  --color-brand-400: oklch(0.71 0.16 293);
+  --color-brand-500: oklch(0.61 0.21 293);
+  --color-brand-600: oklch(0.54 0.24 293);
+
+  /* Fluid type scale (clamp: mobile → desktop) */
+  --text-fluid-h1: clamp(2.25rem, 1.6rem + 3.2vw, 3.5rem);
+  --text-fluid-h2: clamp(1.5rem, 1.2rem + 1.5vw, 2rem);
+  --text-fluid-lead: clamp(1.05rem, 0.98rem + 0.4vw, 1.25rem);
+
+  /* Elevation scale (consistent shadows: card / sticky / overlay) */
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-raised: 0 4px 12px -2px rgba(15, 23, 42, 0.10), 0 2px 6px -2px rgba(15, 23, 42, 0.06);
+}
+
+/* ── Surface + foreground tiers (semantic, light/dark) ───────────────────── */
+:root {
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f8fafc;        /* slate-50  */
+  --border-subtle: #e2e8f0;         /* slate-200 */
+  --fg: #0f172a;                    /* slate-900 */
+  --fg-muted: #475569;              /* slate-600 */
+  --fg-subtle: #94a3b8;             /* slate-400 */
+}
+.dark {
+  --surface: #0f172a;              /* slate-900 */
+  --surface-raised: #1e293b;       /* slate-800 */
+  --surface-sunken: #020617;       /* slate-950 */
+  --border-subtle: #334155;        /* slate-700 */
+  --fg: #f1f5f9;                   /* slate-100 */
+  --fg-muted: #cbd5e1;             /* slate-300 */
+  --fg-subtle: #94a3b8;            /* slate-400 */
+}
+
+/* ── Base layer ──────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--surface);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Tabular figures for code/labels alignment */
+  code, kbd, pre, samp {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum" 1;
+  }
+  ::selection {
+    background-color: var(--color-brand-500);
+    color: #fff;
+  }
+}
+
+/* ── Semantic surface utilities (used by redesigned components) ──────────── */
+@utility surface {
+  background-color: var(--surface);
+}
+@utility surface-raised {
+  background-color: var(--surface-raised);
+}
+@utility surface-sunken {
+  background-color: var(--surface-sunken);
+}
+
+/* Catalog sidebar scroll-spy active state (JS toggles [data-active]) */
+.cat-link[data-active] {
+  color: var(--color-brand-600);
+  border-left-color: var(--color-brand-500);
+  font-weight: 600;
+}
+.dark .cat-link[data-active] {
+  color: var(--color-brand-400);
+}
+
+/* ToC active heading (JS toggles [data-active]) */
+.toc-link[data-active] {
+  color: var(--color-brand-600);
+  font-weight: 600;
+}
+.dark .toc-link[data-active] {
+  color: var(--color-brand-400);
+}
+
+/* ToC anchor visibility: offset for sticky header (h2 + h3 only) */
+:where(article h2, article h3) {
+  scroll-margin-top: 6rem;
+}

@@ -1,0 +1,51 @@
+---
+import '../styles/global.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { t } from '../i18n/ui';
+
+interface Props {
+  title: string;
+  lang?: 'es' | 'en';
+}
+
+const { title, lang = 'es' } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- ⚠️ INLINE BLOCKING THEME DETECTION — must be BEFORE any <link rel="stylesheet"> -->
+    <!-- Source: Astro docs/guides/view-transitions § dark mode + RESEARCH Pitfall 4 -->
+    <script is:inline>
+      (function () {
+        const stored = localStorage.getItem('theme');
+        const isDark =
+          stored === 'dark' ||
+          (stored === null &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (isDark) document.documentElement.classList.add('dark');
+      })();
+    </script>
+
+    <title>{title}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <slot name="head" />
+  </head>
+  <body class="flex min-h-dvh flex-col">
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-0 focus:top-0 focus:z-[100] focus:m-2 focus:rounded focus:bg-brand-600 focus:px-3 focus:py-2 focus:text-white"
+    >
+      {t(lang, 'a11y.skipToContent')}
+    </a>
+    <Header lang={lang} />
+    <div id="main" class="flex-1">
+      <slot />
+    </div>
+    <Footer lang={lang} />
+  </body>
+</html>
