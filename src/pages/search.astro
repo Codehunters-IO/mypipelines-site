@@ -11,17 +11,20 @@ const lang = defaultLocale;
 </BaseLayout>
 
 <link href="/pagefind/pagefind-ui.css" rel="stylesheet" />
+<!-- pagefind-ui.js is a global-assigning bundle (window.PagefindUI), NOT an ES module —
+     load via <script src> and read the global; is:inline keeps Astro/Vite from processing it. -->
+<script src="/pagefind/pagefind-ui.js" is:inline></script>
 <script is:inline>
   window.addEventListener('DOMContentLoaded', () => {
-    import('/pagefind/pagefind-ui.js').then(({ PagefindUI }) => {
-      new PagefindUI({
-        element: '#pagefind-search',
-        showImages: false,
-        resetStyles: false,
-      });
-    }).catch(() => {
+    if (typeof PagefindUI === 'undefined') {
       const el = document.getElementById('pagefind-search');
-      if (el) el.innerHTML = '<p class="text-[var(--fg-muted)] text-sm">El índice de búsqueda no está disponible en modo de desarrollo.</p>';
+      if (el) el.innerHTML = '<p class="text-[var(--fg-muted)] text-sm">El índice de búsqueda aún no está disponible. Ejecutá <code>pnpm build</code>.</p>';
+      return;
+    }
+    new PagefindUI({
+      element: '#pagefind-search',
+      showImages: false,
+      resetStyles: false,
     });
   });
 </script>
