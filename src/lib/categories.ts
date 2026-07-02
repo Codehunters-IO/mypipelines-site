@@ -5,6 +5,13 @@ export const STACK_ORDER = [
   'jenkins',
   'circleci',
   'azure-devops',
+  // Domain stacks used by the pipelines collection
+  'java',
+  'krakend',
+  'react',
+  'nginx',
+  'contracts',
+  'shared',
 ] as const;
 
 export type CategorySlug = (typeof STACK_ORDER)[number];
