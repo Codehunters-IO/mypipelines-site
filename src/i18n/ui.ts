@@ -28,19 +28,6 @@ const strings = {
   // Breadcrumb
   'breadcrumb.home': 'Inicio',
 
-  // Categories / stacks
-  'category.github-actions': 'GitHub Actions',
-  'category.gitlab-ci': 'GitLab CI',
-  'category.jenkins': 'Jenkins',
-  'category.circleci': 'CircleCI',
-  'category.azure-devops': 'Azure DevOps',
-  'category.java': 'Java (Spring Boot)',
-  'category.krakend': 'KrakenD',
-  'category.react': 'React',
-  'category.nginx': 'NGINX',
-  'category.contracts': 'Contracts',
-  'category.shared': 'Shared',
-
   // Theme
   'theme.toggleLabel': 'Cambiar tema',
 
@@ -66,6 +53,6 @@ const strings = {
 
 export type UiKey = keyof typeof strings;
 
-export function t(_lang: string, key: UiKey | `category.${string}`): string {
+export function t(_lang: string, key: UiKey): string {
   return (strings as Record<string, string>)[key] ?? key;
 }

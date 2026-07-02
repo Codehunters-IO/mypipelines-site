@@ -1,9 +1,9 @@
 ---
 import { t, type Locale } from '../i18n/ui';
-import type { CategorySlug } from '../lib/categories';
+import { STACK_LABELS, type Stack } from '../lib/stacks';
 
 interface Props {
-  category: CategorySlug;
+  category: Stack;
   title: string;
   lang: Locale;
 }
@@ -22,8 +22,8 @@ const homeHref = '/';
     <li><a href={homeHref} class="transition-colors hover:text-[var(--fg)]">{t(lang, 'breadcrumb.home')}</a></li>
     <li aria-hidden="true" class="text-[var(--fg-subtle)]">{SEP}</li>
     <li>
-      <a href={`/guides#${category}`} class="transition-colors hover:text-[var(--fg)]">
-        {t(lang, `category.${category}`)}
+      <a href={`/stacks/${category}`} class="transition-colors hover:text-[var(--fg)]">
+        {STACK_LABELS[category]}
       </a>
     </li>
     <li aria-hidden="true" class="text-[var(--fg-subtle)]">{SEP}</li>
