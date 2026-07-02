@@ -1,0 +1,11 @@
+name: Java - Build
+on:
+  workflow_call:
+    inputs:
+      java_version:
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./gradlew build

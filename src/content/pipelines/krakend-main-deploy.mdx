@@ -1,0 +1,53 @@
+---
+title: "Krakend Main Deploy"
+slug: "krakend-main-deploy"
+stack: "krakend"
+kind: "caller"
+type: "deploy"
+triggers: ["push"]
+description: "Template: Deploy on merge to main (production) Copy to: .github/workflows/main-deploy.yml Triggers on push to main branch (after release merge) Runs: build + artifact + deploy (PRODUCTION environment)"
+sourcePath: "templates/krakend-main-deploy.yml"
+---
+
+```yaml title="templates/krakend-main-deploy.yml"
+# Template: Deploy on merge to main (production)
+# Copy to: .github/workflows/main-deploy.yml
+#
+# Triggers on push to main branch (after release merge)
+# Runs: build + artifact + deploy (PRODUCTION environment)
+#
+# Required secrets: Same as develop-deploy.yml
+# Note: Audit should have passed in release branch, only build and deploy here
+
+name: Deploy to PRODUCTION
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write   # required by run_tag to push vX.Y.Z tag and create GitHub Release
+  id-token: write
+
+jobs:
+  deploy:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    uses: <org>/ci-templates/.github/workflows/krakend-main-pipeline.yml@main
+    with:
+      run_build: true
+      run_test: false
+      run_artifact: true
+      run_deploy: true
+      environment: 'production'
+      run_tag: true
+      run_notifications: true
+      notify_mention_on_failure: '@channel'
+      # extra_volumes: default mounts ./certs:/etc/krakend/certs:ro on the host.
+      # Place certs at /opt/docker/<repo>/certs/ on the EC2 host before deploy.
+      # Override below to add more bind mounts (one per line, leading "- "):
+      # extra_volumes: |
+      #   - ./certs:/etc/krakend/certs:ro
+      #   - ./config:/etc/krakend/config:ro
+    secrets: inherit
+```

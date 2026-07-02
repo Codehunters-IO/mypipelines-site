@@ -55,3 +55,42 @@ test('toSlug strips dir and extension', () => {
   assert.equal(toSlug('.github/workflows/java-build.yml'), 'java-build');
   assert.equal(toSlug('.github/CODEOWNERS'), 'CODEOWNERS');
 });
+
+test('extractDescription clamps to 200 chars', () => {
+  const raw = '# ' + 'x'.repeat(300) + '\n\nname: y\n';
+  assert.ok(extractDescription(raw).length <= 200);
+});
+
+import { generate, collectSources } from '../scripts/sync-pipelines.mjs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+test('collectSources finds workflows, templates, rulesets, CODEOWNERS', () => {
+  const root = 'tests/fixtures/ci-templates';
+  const rels = collectSources(root).map((s) => s.relPath).sort();
+  assert.deepEqual(rels, [
+    '.github/CODEOWNERS',
+    '.github/ruleset/ruleset-main.json',
+    '.github/workflows/java-build.yml',
+    'templates/java-main-deploy.yml',
+  ]);
+});
+
+test('generate writes one mdx per source with valid frontmatter', () => {
+  const dest = mkdtempSync(join(tmpdir(), 'mp-'));
+  const count = generate('tests/fixtures/ci-templates', dest);
+  assert.equal(count, 4);
+  const files = readdirSync(dest).sort();
+  assert.deepEqual(files, ['CODEOWNERS.mdx', 'java-build.mdx', 'java-main-deploy.mdx', 'ruleset-main.mdx']);
+  const build = readFileSync(join(dest, 'java-build.mdx'), 'utf8');
+  assert.match(build, /stack: "java"/);
+  assert.match(build, /kind: "reusable"/);
+  assert.match(build, /type: "build"/);
+  assert.match(build, /```yaml/);
+  assert.match(build, /\.\/gradlew build/);
+  const deploy = readFileSync(join(dest, 'java-main-deploy.mdx'), 'utf8');
+  assert.match(deploy, /kind: "caller"/);
+  assert.match(deploy, /triggers: \["push"\]/);
+  rmSync(dest, { recursive: true, force: true });
+});

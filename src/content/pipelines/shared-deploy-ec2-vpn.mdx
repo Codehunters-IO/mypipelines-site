@@ -1,0 +1,441 @@
+---
+title: "Shared Deploy Ec2 Vpn"
+slug: "shared-deploy-ec2-vpn"
+stack: "shared"
+kind: "reusable"
+type: "deploy"
+triggers: ["workflow_call"]
+description: "Shared - Deploy to EC2 (WireGuard VPN)"
+sourcePath: ".github/workflows/shared-deploy-ec2-vpn.yml"
+---
+
+```yaml title=".github/workflows/shared-deploy-ec2-vpn.yml"
+name: Shared - Deploy to EC2 (WireGuard VPN)
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'Runner type'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: true
+        type: string
+      environment:
+        description: 'GitHub environment (develop, prod)'
+        required: false
+        type: string
+        default: 'develop'
+      verify_vpn_connectivity:
+        description: 'Run ping check to EC2 host before deploying'
+        required: false
+        type: boolean
+        default: false
+      docker_platform:
+        description: 'Docker platform for the container (linux/amd64, linux/arm64)'
+        required: false
+        type: string
+        default: 'linux/arm64'
+      memory_limit:
+        description: 'Container memory limit (e.g., 512m, 1g)'
+        required: false
+        type: string
+        default: '800m'
+      memory_reservation:
+        description: 'Container memory reservation (e.g., 256m, 512m)'
+        required: false
+        type: string
+        default: '256m'
+      internal_port:
+        description: 'Container internal port exposed by the app (8080 for Java/Krakend, 8545 for Hardhat, 3000 for React, etc.)'
+        required: false
+        type: string
+        default: '8080'
+      container_env_vars:
+        description: 'Additional environment variables block for docker-compose (one per line: KEY=VALUE)'
+        required: false
+        type: string
+        default: ''
+      extra_volumes:
+        description: 'Additional docker-compose volume mounts (one per line, including the leading "- ", e.g. "- ./certs:/etc/krakend/certs:ro")'
+        required: false
+        type: string
+        default: ''
+
+    secrets:
+      AWS_ECR_URL:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_REGION:
+        required: true
+      AWS_EC2_HOST:
+        required: true
+      AWS_EC2_USER:
+        required: true
+      AWS_EC2_SSH_KEY:
+        required: true
+      AWS_APP_PORT:
+        required: true
+      WG_PRIVATE_KEY:
+        required: true
+      WG_ADDRESS:
+        required: true
+      WG_DNS:
+        required: false
+      WG_PEER_PUBLIC_KEY:
+        required: true
+      WG_PEER_ALLOWED_IPS:
+        required: true
+      WG_PEER_ENDPOINT:
+        required: true
+
+    outputs:
+      deploy_status:
+        description: 'Deployment status'
+        value: ${{ jobs.deploy.outputs.status }}
+      deployed_image:
+        description: 'Deployed image tag'
+        value: ${{ jobs.deploy.outputs.image }}
+
+jobs:
+  deploy:
+    name: Deploy to EC2 via WireGuard
+    runs-on: ${{ inputs.runner }}
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 20
+
+    outputs:
+      status: ${{ steps.deploy.outputs.status }}
+      image: ${{ inputs.image_tag }}
+
+    steps:
+      - name: Set repository name
+        id: repo
+        run: |
+          REPO_NAME="${{ github.repository }}"
+          REPO_NAME="${REPO_NAME##*/}"
+          echo "name=$REPO_NAME" >> $GITHUB_OUTPUT
+          echo "Repository name: $REPO_NAME"
+
+      - name: Install WireGuard
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wireguard wireguard-tools resolvconf
+          wg --version
+
+      - name: Setup WireGuard tunnel
+        id: wg
+        env:
+          WG_IFACE: wg0
+          WG_PRIVATE_KEY: ${{ secrets.WG_PRIVATE_KEY }}
+          WG_ADDRESS: ${{ secrets.WG_ADDRESS }}
+          WG_DNS: ${{ secrets.WG_DNS }}
+          WG_PEER_PUBLIC_KEY: ${{ secrets.WG_PEER_PUBLIC_KEY }}
+          WG_PEER_ALLOWED_IPS: ${{ secrets.WG_PEER_ALLOWED_IPS }}
+          WG_PEER_ENDPOINT: ${{ secrets.WG_PEER_ENDPOINT }}
+        run: |
+          set -e
+          WG_CONF_PATH="/etc/wireguard/${WG_IFACE}.conf"
+
+          echo "Writing WireGuard config to ${WG_CONF_PATH}"
+          sudo mkdir -p /etc/wireguard
+          {
+            echo "[Interface]"
+            echo "PrivateKey = ${WG_PRIVATE_KEY}"
+            echo "Address = ${WG_ADDRESS}"
+            if [ -n "${WG_DNS}" ]; then
+              echo "DNS = ${WG_DNS}"
+            fi
+            echo ""
+            echo "[Peer]"
+            echo "PublicKey = ${WG_PEER_PUBLIC_KEY}"
+            echo "AllowedIPs = ${WG_PEER_ALLOWED_IPS}"
+            echo "Endpoint = ${WG_PEER_ENDPOINT}"
+            echo "PersistentKeepalive = 25"
+          } | sudo tee "$WG_CONF_PATH" > /dev/null
+          sudo chmod 600 "$WG_CONF_PATH"
+
+          echo "Bringing up WireGuard interface ${WG_IFACE}..."
+          sudo wg-quick up "$WG_IFACE"
+
+          echo "WireGuard status:"
+          sudo wg show "$WG_IFACE"
+
+          echo "started=true" >> $GITHUB_OUTPUT
+
+      - name: Verify VPN connectivity to EC2
+        if: inputs.verify_vpn_connectivity
+        env:
+          AWS_EC2_HOST: ${{ secrets.AWS_EC2_HOST }}
+        run: |
+          echo "Testing connectivity to ${AWS_EC2_HOST} over VPN..."
+          for i in 1 2 3 4 5; do
+            if ping -c 1 -W 3 "${AWS_EC2_HOST}" >/dev/null 2>&1; then
+              echo "VPN connectivity OK (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 2
+          done
+          echo "WARNING: ping failed, will still try SSH"
+
+      - name: Deploy via SSH
+        id: deploy
+        env:
+          AWS_EC2_HOST: ${{ secrets.AWS_EC2_HOST }}
+          AWS_EC2_USER: ${{ secrets.AWS_EC2_USER }}
+          AWS_EC2_SSH_KEY: ${{ secrets.AWS_EC2_SSH_KEY }}
+          AWS_ECR_URL: ${{ secrets.AWS_ECR_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          APP_PORT: ${{ secrets.AWS_APP_PORT }}
+          REPO_NAME: ${{ steps.repo.outputs.name }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          DOCKER_PLATFORM: ${{ inputs.docker_platform }}
+          MEMORY_LIMIT: ${{ inputs.memory_limit }}
+          MEMORY_RESERVATION: ${{ inputs.memory_reservation }}
+          INTERNAL_PORT: ${{ inputs.internal_port }}
+          CONTAINER_ENV_VARS: ${{ inputs.container_env_vars }}
+          EXTRA_VOLUMES: ${{ inputs.extra_volumes }}
+        run: |
+          # Setup SSH
+          mkdir -p ~/.ssh
+          echo "$AWS_EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $AWS_EC2_HOST >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Encode multiline env vars to preserve newlines over SSH
+          CONTAINER_ENV_VARS_B64=$(echo "$CONTAINER_ENV_VARS" | base64 | tr -d '\n')
+          EXTRA_VOLUMES_B64=$(echo "$EXTRA_VOLUMES" | base64 | tr -d '\n')
+
+          # Create deployment script
+          cat > /tmp/deploy.sh << 'DEPLOY_SCRIPT'
+          #!/bin/bash
+          set -e
+
+          DEPLOY_DIR="/opt/docker/${REPO_NAME}"
+
+          echo "=========================================="
+          echo "Deploying ${REPO_NAME}"
+          echo "Image tag: ${IMAGE_TAG}"
+          echo "Environment: ${ENVIRONMENT}"
+          echo "=========================================="
+
+          # Create directories if not exists
+          if [ ! -d "$DEPLOY_DIR" ]; then
+            echo "Creating directory: $DEPLOY_DIR"
+            sudo mkdir -p "$DEPLOY_DIR"
+            sudo chown ${USER}:${USER} "$DEPLOY_DIR"
+          fi
+
+          cd "$DEPLOY_DIR"
+
+          # Create shared_logs volume if not exists
+          docker volume inspect shared_logs >/dev/null 2>&1 || docker volume create shared_logs
+
+          # Login to ECR
+          echo "Logging in to ECR..."
+          aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ECR_URL}
+
+          # Decode env vars from base64
+          CONTAINER_ENV_VARS=$(echo "${CONTAINER_ENV_VARS_B64}" | base64 -d)
+          EXTRA_VOLUMES=$(echo "${EXTRA_VOLUMES_B64}" | base64 -d)
+
+          # Create docker-compose.yml (standard name)
+          COMPOSE_FILE_NAME="docker-compose.yml"
+          echo "Creating ${COMPOSE_FILE_NAME}..."
+          {
+            echo "services:"
+            echo "  ${REPO_NAME}:"
+            echo "    image: ${AWS_ECR_URL}/${REPO_NAME}:${IMAGE_TAG}"
+            echo "    platform: ${DOCKER_PLATFORM}"
+            echo "    container_name: ${REPO_NAME}"
+            echo "    restart: unless-stopped"
+            echo "    environment:"
+            echo "      - APP_NAME=${REPO_NAME}"
+            echo "      - PATH_LOGS=/app/log/${REPO_NAME}"
+            echo "      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+            echo "      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
+            echo "      - AWS_REGION=${AWS_REGION}"
+            if [ -n "${CONTAINER_ENV_VARS}" ]; then
+              while IFS= read -r line; do
+                if [ -n "$line" ]; then
+                  echo "      - ${line}"
+                fi
+              done <<< "${CONTAINER_ENV_VARS}"
+            fi
+            echo "    ports:"
+            echo "      - \"${APP_PORT}:${INTERNAL_PORT}\""
+            echo "    volumes:"
+            echo "      - shared_logs:/app/log"
+            if [ -n "${EXTRA_VOLUMES}" ]; then
+              while IFS= read -r line; do
+                if [ -n "$line" ]; then
+                  echo "      ${line}"
+                fi
+              done <<< "${EXTRA_VOLUMES}"
+            fi
+            echo "    mem_limit: ${MEMORY_LIMIT}"
+            echo "    mem_reservation: ${MEMORY_RESERVATION}"
+            echo "    networks:"
+            echo "      - soldife_net"
+            echo "    logging:"
+            echo "      driver: \"json-file\""
+            echo "      options:"
+            echo "        max-size: \"10m\""
+            echo "        max-file: \"3\""
+            echo ""
+            echo "volumes:"
+            echo "  shared_logs:"
+            echo "    external: true"
+            echo ""
+            echo "networks:"
+            echo "  soldife_net:"
+            echo "    external: true"
+          } > "${COMPOSE_FILE_NAME}"
+
+          # Create start.sh (rm + recreate so ownership matches current user;
+          # avoids "chmod: Operation not permitted" on hosts where the file was
+          # left behind by a different deploy user.)
+          echo "Creating start.sh..."
+          sudo rm -f start.sh
+          printf "#!/usr/bin/env bash\nset -euo pipefail\nCOMPOSE_FILE=\"\${COMPOSE_FILE:-%s}\"\nPROJECT_NAME=\"\${PROJECT_NAME:-%s}\"\necho \"==> Starting stack (project: \${PROJECT_NAME})\"\ndocker compose -p \"\${PROJECT_NAME}\" -f \"\${COMPOSE_FILE}\" up -d\necho \"==> Current status:\"\ndocker compose -p \"\${PROJECT_NAME}\" -f \"\${COMPOSE_FILE}\" ps\necho \"==> App logs (last 50 lines):\"\ndocker compose -p \"\${PROJECT_NAME}\" -f \"\${COMPOSE_FILE}\" logs --tail=50\n" "${COMPOSE_FILE_NAME}" "${REPO_NAME}" > start.sh
+          chmod +x start.sh
+
+          # Create stop.sh (rm + recreate; see start.sh note above)
+          echo "Creating stop.sh..."
+          sudo rm -f stop.sh
+          printf "#!/usr/bin/env bash\nset -uo pipefail\nCOMPOSE_FILE=\"\${COMPOSE_FILE:-%s}\"\nPROJECT_NAME=\"\${PROJECT_NAME:-%s}\"\necho \"==> Stopping stack (project: \${PROJECT_NAME})\"\ndocker compose -p \"\${PROJECT_NAME}\" -f \"\${COMPOSE_FILE}\" down --timeout 30 || true\necho \"==> Done.\"\n" "${COMPOSE_FILE_NAME}" "${REPO_NAME}" > stop.sh
+          chmod +x stop.sh
+
+          # Pull latest image from ECR
+          echo "Pulling latest image..."
+          docker pull ${AWS_ECR_URL}/${REPO_NAME}:${IMAGE_TAG}
+
+          # Stop existing container if running (force-kill fallback if hung)
+          if docker ps -aq -f name=${REPO_NAME} 2>/dev/null | grep -q .; then
+            echo "Stopping existing container (graceful, 30s timeout)..."
+            timeout 60 ./stop.sh || true
+            if docker ps -q -f name=${REPO_NAME} 2>/dev/null | grep -q .; then
+              echo "Container still running, force-killing..."
+              docker kill ${REPO_NAME} 2>/dev/null || true
+              docker rm -f ${REPO_NAME} 2>/dev/null || true
+            fi
+          fi
+
+          # Remove only old images for this repo (keep the new one)
+          echo "Removing old images for ${REPO_NAME}..."
+          docker images "${AWS_ECR_URL}/${REPO_NAME}" --format '{{.Repository}}:{{.Tag}}' \
+            | grep -v ":${IMAGE_TAG}$" \
+            | xargs -r docker rmi 2>/dev/null || true
+
+          # Start new container
+          echo "Starting new container..."
+          ./start.sh
+
+          echo "Deployment completed successfully!"
+          DEPLOY_SCRIPT
+
+          SSH_COMMON_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=20"
+
+          # Retry helper: SSH transport can drop transiently. Retry up to 3 times.
+          run_with_retry() {
+            local attempt=1
+            local max_attempts=3
+            local delay=15
+            while [ "$attempt" -le "$max_attempts" ]; do
+              echo "Attempt $attempt/$max_attempts: $*"
+              if "$@"; then
+                return 0
+              fi
+              local rc=$?
+              echo "Attempt $attempt failed (exit $rc)"
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                echo "Retrying in ${delay}s..."
+                sleep "$delay"
+                delay=$((delay * 2))
+              fi
+              attempt=$((attempt + 1))
+            done
+            return 1
+          }
+
+          # Copy script to EC2 (with retry)
+          run_with_retry bash -c "scp $SSH_COMMON_OPTS /tmp/deploy.sh ${AWS_EC2_USER}@${AWS_EC2_HOST}:~/deploy.sh" || {
+            echo "::warning::scp failed after retries — server may be unreachable. Skipping remote deploy."
+            echo "status=skipped_unreachable" >> $GITHUB_OUTPUT
+            exit 0
+          }
+
+          # Execute deploy script (with retry on transport error)
+          DEPLOY_RC=0
+          run_with_retry bash -c "ssh $SSH_COMMON_OPTS ${AWS_EC2_USER}@${AWS_EC2_HOST} \"
+            chmod +x ~/deploy.sh && \
+            REPO_NAME='${REPO_NAME}' \
+            IMAGE_TAG='${IMAGE_TAG}' \
+            AWS_ECR_URL='${AWS_ECR_URL}' \
+            AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}' \
+            AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}' \
+            AWS_REGION='${AWS_REGION}' \
+            APP_PORT='${APP_PORT}' \
+            ENVIRONMENT='${ENVIRONMENT}' \
+            DOCKER_PLATFORM='${DOCKER_PLATFORM}' \
+            MEMORY_LIMIT='${MEMORY_LIMIT}' \
+            MEMORY_RESERVATION='${MEMORY_RESERVATION}' \
+            INTERNAL_PORT='${INTERNAL_PORT}' \
+            CONTAINER_ENV_VARS_B64='${CONTAINER_ENV_VARS_B64}' \
+            EXTRA_VOLUMES_B64='${EXTRA_VOLUMES_B64}' \
+            ~/deploy.sh && \
+            rm -f ~/deploy.sh
+          \"" || DEPLOY_RC=$?
+
+          # Post-deploy verification: if container is running w/ correct image, success regardless of transport error
+          echo "Verifying container state..."
+          VERIFY_OUTPUT=$(ssh $SSH_COMMON_OPTS ${AWS_EC2_USER}@${AWS_EC2_HOST} "docker ps --filter name=^${REPO_NAME}$ --format '{{.Image}}|{{.Status}}' 2>/dev/null" || echo "")
+          RUNNING_IMAGE=$(echo "$VERIFY_OUTPUT" | cut -d'|' -f1)
+          RUNNING_STATUS=$(echo "$VERIFY_OUTPUT" | cut -d'|' -f2)
+          echo "Container image: '$RUNNING_IMAGE'"
+          echo "Container status: '$RUNNING_STATUS'"
+
+          if echo "$RUNNING_IMAGE" | grep -q "${REPO_NAME}:${IMAGE_TAG}$"; then
+            echo "Container is running with target image."
+            echo "status=success" >> $GITHUB_OUTPUT
+          elif [ "$DEPLOY_RC" -eq 0 ]; then
+            echo "Deploy script completed but verification could not confirm running container."
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Deploy failed (rc=$DEPLOY_RC) and container is not running with target image."
+            echo "status=failure" >> $GITHUB_OUTPUT
+            exit "$DEPLOY_RC"
+          fi
+
+          # Summary
+          echo "### Deployment Completed (via WireGuard VPN)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Server** | $AWS_EC2_HOST |" >> $GITHUB_STEP_SUMMARY
+          echo "| **VPN** | WireGuard (wg0) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Application** | $REPO_NAME |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | $IMAGE_TAG |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | $ENVIRONMENT |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Port** | $APP_PORT |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Directory** | /opt/docker/$REPO_NAME |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Teardown WireGuard tunnel
+        if: always() && steps.wg.outputs.started == 'true'
+        env:
+          WG_IFACE: wg0
+        run: |
+          echo "Bringing down WireGuard interface ${WG_IFACE}..."
+          sudo wg-quick down "$WG_IFACE" || true
+          sudo rm -f "/etc/wireguard/${WG_IFACE}.conf"
+```

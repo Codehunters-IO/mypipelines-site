@@ -1,0 +1,30 @@
+---
+title: "Krakend Commit Lint"
+slug: "krakend-commit-lint"
+stack: "krakend"
+kind: "reusable"
+type: "lint"
+triggers: ["workflow_call"]
+description: "DEPRECATED: Use shared-commit-lint.yml instead"
+sourcePath: ".github/workflows/krakend-commit-lint.yml"
+---
+
+```yaml title=".github/workflows/krakend-commit-lint.yml"
+# DEPRECATED: Use shared-commit-lint.yml instead
+name: "[DEPRECATED] KrakenD - Commit Lint"
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'Runner type'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  lint:
+    uses: ./.github/workflows/shared-commit-lint.yml
+    with:
+      runner: ${{ inputs.runner }}
+```

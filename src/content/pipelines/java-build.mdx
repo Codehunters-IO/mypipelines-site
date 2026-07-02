@@ -1,0 +1,92 @@
+---
+title: "Java Build"
+slug: "java-build"
+stack: "java"
+kind: "reusable"
+type: "build"
+triggers: ["workflow_call"]
+description: "Java - Build"
+sourcePath: ".github/workflows/java-build.yml"
+---
+
+```yaml title=".github/workflows/java-build.yml"
+name: Java - Build
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'Runner type'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      java_version:
+        description: 'Java version'
+        required: false
+        type: string
+        default: '21'
+      java_distribution:
+        description: 'Java distribution (temurin, corretto, zulu, etc.)'
+        required: false
+        type: string
+        default: 'temurin'
+      run_spotless:
+        description: 'Run Spotless code formatting check'
+        required: false
+        type: boolean
+        default: true
+      build_tool:
+        description: 'Build tool: gradle or maven'
+        required: false
+        type: string
+        default: 'gradle'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup JDK ${{ inputs.java_version }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+
+      - name: Setup Gradle
+        if: inputs.build_tool == 'gradle'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      - name: Build (Gradle)
+        if: inputs.build_tool == 'gradle'
+        env:
+          GH_PACKAGES_USERNAME: ${{ secrets.GH_PACKAGES_USERNAME }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+        run: ./gradlew clean build -x test --no-daemon --build-cache --parallel
+
+      - name: Build (Maven)
+        if: inputs.build_tool == 'maven'
+        env:
+          GH_PACKAGES_USERNAME: ${{ secrets.GH_PACKAGES_USERNAME }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+        run: mvn clean package -DskipTests -B
+
+      - name: Spotless check
+        if: inputs.run_spotless && inputs.build_tool == 'gradle'
+        run: ./gradlew spotlessCheck --no-daemon --build-cache
+
+      # ============================================
+      # CLEANUP
+      # ============================================
+      - name: Cleanup Gradle daemon
+        if: inputs.build_tool == 'gradle' && always()
+        run: |
+          rm -rf ~/.gradle/daemon
+          ./gradlew --stop 2>/dev/null || true
+```

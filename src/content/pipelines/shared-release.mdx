@@ -1,0 +1,238 @@
+---
+title: "Shared Release"
+slug: "shared-release"
+stack: "shared"
+kind: "reusable"
+type: "release"
+triggers: ["workflow_call"]
+description: "Shared - Create Release"
+sourcePath: ".github/workflows/shared-release.yml"
+---
+
+```yaml title=".github/workflows/shared-release.yml"
+name: Shared - Create Release
+
+# Required caller permissions:
+#   contents: read         # read base/target branch
+#   pull-requests: write   # create / edit release PRs
+
+on:
+  workflow_call:
+    inputs:
+      base_branch:
+        description: 'Branch to create release from (PR head)'
+        required: false
+        type: string
+        default: 'develop'
+      target_branch:
+        description: 'Target branch for PR (PR base)'
+        required: false
+        type: string
+        default: 'main'
+      strict_flow:
+        description: 'Enforce GitFlow: base_branch must be develop, target_branch must be main'
+        required: false
+        type: boolean
+        default: true
+
+    outputs:
+      version:
+        description: 'Computed release version (semver)'
+        value: ${{ jobs.release.outputs.version }}
+      pr_number:
+        description: 'Pull request number'
+        value: ${{ jobs.release.outputs.pr_number }}
+      pr_url:
+        description: 'Pull request URL'
+        value: ${{ jobs.release.outputs.pr_url }}
+      changelog:
+        description: 'Release changelog (commit list)'
+        value: ${{ jobs.release.outputs.changelog }}
+
+concurrency:
+  group: shared-release-${{ github.repository }}-${{ inputs.base_branch }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create Release PR
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
+      pr_number: ${{ steps.upsert-pr.outputs.pr_number }}
+      pr_url: ${{ steps.upsert-pr.outputs.pr_url }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+
+    steps:
+      - name: Validate release flow
+        env:
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          STRICT_FLOW: ${{ inputs.strict_flow }}
+        run: |
+          echo "Release flow: $BASE_BRANCH -> $TARGET_BRANCH (strict=$STRICT_FLOW)"
+
+          if [ "$STRICT_FLOW" != "true" ]; then
+            echo "Strict flow disabled, skipping validation."
+            exit 0
+          fi
+
+          ERRORS=0
+          if [ "$BASE_BRANCH" != "develop" ]; then
+            echo "::error::Release base_branch must be 'develop' under strict flow. Got: '$BASE_BRANCH'."
+            ERRORS=1
+          fi
+          if [ "$TARGET_BRANCH" != "main" ]; then
+            echo "::error::Release target_branch must be 'main' under strict flow. Got: '$TARGET_BRANCH'."
+            ERRORS=1
+          fi
+
+          if [ "$ERRORS" -ne 0 ]; then
+            echo ""
+            echo "Strict GitFlow requires release PRs to flow develop -> main."
+            echo "Set strict_flow: false to opt out (custom GitFlow only)."
+            exit 1
+          fi
+
+          echo "Release flow validated: develop -> main."
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.base_branch }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Calculate semantic version
+        id: semver
+        uses: PaulHatch/semantic-version@v5.4.0
+        with:
+          tag_prefix: "v"
+          major_pattern: "(MAJOR|BREAKING CHANGE)"
+          minor_pattern: "(feat)"
+          format: "${major}.${minor}.${patch}"
+
+      - name: Guard against already-released version
+        id: guard
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::warning::Tag ${TAG} already exists; release was already cut. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Release skipped"
+              echo ""
+              echo "Tag \`${TAG}\` already exists. Commit a \`feat:\` or breaking change to bump the version."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check branches diverged
+        id: diff
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          git fetch --no-tags origin "${BASE_BRANCH}" "${TARGET_BRANCH}"
+          AHEAD="$(git rev-list --count "origin/${TARGET_BRANCH}..origin/${BASE_BRANCH}")"
+          echo "ahead=${AHEAD}" >> "$GITHUB_OUTPUT"
+          if [ "${AHEAD}" -eq 0 ]; then
+            echo "::warning::${BASE_BRANCH} has no commits ahead of ${TARGET_BRANCH}; nothing to release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        if: steps.guard.outputs.skip == 'false' && steps.diff.outputs.skip == 'false'
+        env:
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          CHANGELOG="$(git log "origin/${TARGET_BRANCH}..origin/${BASE_BRANCH}" --pretty=format:'- %s (%h)' | head -30)"
+          if [ -z "${CHANGELOG}" ]; then
+            CHANGELOG="- (no commits)"
+          fi
+          {
+            echo "changelog<<EOF"
+            echo "${CHANGELOG}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update Pull Request
+        id: upsert-pr
+        if: steps.guard.outputs.skip == 'false' && steps.diff.outputs.skip == 'false'
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_BODY_FILE="$(mktemp)"
+          {
+            echo "## Release v${VERSION}"
+            echo ""
+            echo "Automatically created from \`${BASE_BRANCH}\` -> \`${TARGET_BRANCH}\`."
+            echo "Tag \`v${VERSION}\` will be created on merge to \`${TARGET_BRANCH}\`."
+            echo ""
+            echo "### Changes"
+            echo "${CHANGELOG}"
+            echo ""
+            echo "### Checklist"
+            echo "- [ ] Review changes"
+            echo "- [ ] Approve and merge to deploy to production"
+            echo ""
+            echo "---"
+            echo "_Last updated by run [#${RUN_NUMBER}](https://github.com/${REPO}/actions/runs/${RUN_ID}) at $(date -u +%FT%TZ)._"
+          } > "${PR_BODY_FILE}"
+
+          EXISTING_PR_JSON="$(gh pr list \
+            --state open \
+            --head "${BASE_BRANCH}" \
+            --base "${TARGET_BRANCH}" \
+            --json number,url \
+            --jq '.[0] // empty')"
+
+          if [ -z "${EXISTING_PR_JSON}" ]; then
+            gh pr create \
+              --title "Release v${VERSION}" \
+              --body-file "${PR_BODY_FILE}" \
+              --base "${TARGET_BRANCH}" \
+              --head "${BASE_BRANCH}" >/dev/null
+            PR_NUMBER="$(gh pr list --head "${BASE_BRANCH}" --base "${TARGET_BRANCH}" --state open --json number --jq '.[0].number')"
+            PR_URL="$(gh pr view "${PR_NUMBER}" --json url --jq '.url')"
+            ACTION="created"
+          else
+            PR_NUMBER="$(echo "${EXISTING_PR_JSON}" | jq -r '.number')"
+            PR_URL="$(echo "${EXISTING_PR_JSON}" | jq -r '.url')"
+            gh pr edit "${PR_NUMBER}" \
+              --title "Release v${VERSION}" \
+              --body-file "${PR_BODY_FILE}" >/dev/null
+            ACTION="updated"
+          fi
+
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Release PR ${ACTION}"
+            echo ""
+            echo "| Property | Value |"
+            echo "|----------|-------|"
+            echo "| Version | v${VERSION} |"
+            echo "| Head | ${BASE_BRANCH} |"
+            echo "| Base | ${TARGET_BRANCH} |"
+            echo "| PR | #${PR_NUMBER} |"
+            echo "| URL | ${PR_URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+```

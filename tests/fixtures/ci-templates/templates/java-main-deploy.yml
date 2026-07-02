@@ -1,0 +1,9 @@
+# Template: Deploy on merge to main (production)
+# Runs build + artifact + deploy
+name: Deploy to Production
+on:
+  push:
+    branches: [main]
+jobs:
+  pipeline:
+    uses: <org>/ci-templates/.github/workflows/java-main-pipeline.yml@main

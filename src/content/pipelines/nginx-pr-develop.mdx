@@ -1,0 +1,34 @@
+---
+title: "Nginx Pr Develop"
+slug: "nginx-pr-develop"
+stack: "nginx"
+kind: "caller"
+type: "misc"
+triggers: ["pull_request"]
+description: "Template: PR to develop validation Copy to: .github/workflows/pr-develop.yml Triggers on pull requests targeting develop branch Runs: commit-lint + build (image + nginx -t) + smoke test (/__health)"
+sourcePath: "templates/nginx-pr-develop.yml"
+---
+
+```yaml title="templates/nginx-pr-develop.yml"
+# Template: PR to develop validation
+# Copy to: .github/workflows/pr-develop.yml
+#
+# Triggers on pull requests targeting develop branch
+# Runs: commit-lint + build (image + nginx -t) + smoke test (/__health)
+
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  validate:
+    uses: <org>/ci-templates/.github/workflows/nginx-main-pipeline.yml@main
+    with:
+      run_commit_lint: true
+      run_build: true
+      run_test: true
+    secrets: inherit
+```
