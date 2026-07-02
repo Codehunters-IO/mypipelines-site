@@ -5,7 +5,7 @@ import { defaultLocale } from '../../i18n/ui';
 
 const lang = defaultLocale;
 const all = await getCollection('pipelines');
-const refs = all.filter((e) => e.data.kind === 'ruleset' || e.data.kind === 'codeowners');
+const refs = all.filter((e) => e.data.kind === 'ruleset' || e.data.kind === 'codeowners').sort((a, b) => a.data.title.localeCompare(b.data.title));
 const rendered = await Promise.all(refs.map(async (e) => ({ d: e.data, Content: (await render(e)).Content })));
 ---
 <BaseLayout title="Rulesets & CODEOWNERS" lang={lang}>

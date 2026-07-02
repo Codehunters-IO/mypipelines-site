@@ -1,6 +1,5 @@
 ---
 import ThemeToggle from './ThemeToggle.astro';
-import SearchModal from './SearchModal.astro';
 import { t } from '../i18n/ui';
 import type { Locale } from '../i18n/ui';
 
@@ -10,10 +9,14 @@ interface Props {
 
 const { lang } = Astro.props;
 
-const homeHref = '/';
-const guidesHref = '/guides';
 const path = Astro.url.pathname;
-const guidesActive = path.includes('/guides');
+
+const navLinks = [
+  { href: '/', key: 'nav.stacks' as const },
+  { href: '/guides/quick-start', key: 'nav.guides' as const },
+  { href: '/reference/rulesets', key: 'nav.reference' as const },
+  { href: '/search', key: 'nav.search' as const },
+];
 ---
 
 <header
@@ -22,7 +25,7 @@ const guidesActive = path.includes('/guides');
 >
   <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-2.5">
     <a
-      href={homeHref}
+      href="/"
       class="group inline-flex items-center gap-2 rounded font-mono text-sm font-semibold tracking-tight text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
     >
       <span aria-hidden="true" class="h-2 w-2 rounded-full bg-brand-500 transition-transform group-hover:scale-125"></span>
@@ -30,20 +33,24 @@ const guidesActive = path.includes('/guides');
     </a>
 
     <div class="flex items-center gap-1 sm:gap-3">
-      <a
-        href={guidesHref}
-        aria-current={guidesActive ? 'page' : undefined}
-        class:list={[
-          'rounded px-2 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
-          guidesActive
-            ? 'text-brand-600 dark:text-brand-400'
-            : 'text-[var(--fg-muted)] hover:text-[var(--fg)]',
-        ]}
-      >
-        {t(lang, 'nav.guides')}
-      </a>
+      {navLinks.map(({ href, key }) => {
+        const isActive = href === '/' ? path === '/' : path.startsWith(href);
+        return (
+          <a
+            href={href}
+            aria-current={isActive ? 'page' : undefined}
+            class:list={[
+              'rounded px-2 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+              isActive
+                ? 'text-brand-600 dark:text-brand-400'
+                : 'text-[var(--fg-muted)] hover:text-[var(--fg)]',
+            ]}
+          >
+            {t(lang, key)}
+          </a>
+        );
+      })}
       <span aria-hidden="true" class="hidden h-4 w-px bg-[var(--border-subtle)] sm:block"></span>
-      <SearchModal lang={lang} />
       <ThemeToggle lang={lang} />
     </div>
   </div>
