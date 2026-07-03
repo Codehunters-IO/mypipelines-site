@@ -1,0 +1,119 @@
+---
+title: "Quality gates: Spotless, JaCoCo, SonarCloud"
+slug: "quality-gates"
+order: 2
+description: "Formateo con Spotless (google-java-format), cobertura agregada multi-módulo con JaCoCo + log por módulo, y análisis SonarCloud."
+---
+
+# Quality gates: Spotless, JaCoCo, SonarCloud
+
+## Spotless — formateo determinista
+
+`google-java-format` fija el estilo; `removeUnusedImports` + `endWithNewline`
+dejan el diff limpio. Corre `spotlessApply` local y `spotlessCheck` en CI.
+
+```kotlin title="build.gradle.kts (subprojects)"
+spotless {
+    java {
+        googleJavaFormat(property("google.java.format.version").toString())
+        target("src/**/*.java")
+        trimTrailingWhitespace()
+        endWithNewline()
+        removeUnusedImports()
+    }
+}
+```
+
+## JaCoCo — cobertura agregada multi-módulo
+
+Cada test corre y dispara su reporte:
+
+```kotlin title="build.gradle.kts (subprojects)"
+tasks.withType<Test> {
+    useJUnitPlatform()
+    finalizedBy("jacocoTestReport")
+}
+```
+
+Un task agregador junta la cobertura de todos los subprojects en un solo reporte
+(XML para Sonar, HTML para humanos), excluyendo `config`:
+
+```kotlin title="build.gradle.kts (root)"
+tasks.register<JacocoReport>("codeCoverageReport") {
+    group = JavaBasePlugin.VERIFICATION_GROUP
+    dependsOn(subprojects.mapNotNull { it.tasks.findByName("test")?.let { _ -> it.tasks.named("test") } })
+
+    val excluded = listOf("**/config/**")
+    val allClassDirs = files(); val allSourceDirs = files(); val allExecData = files()
+
+    subprojects {
+        plugins.withType<JacocoPlugin>().configureEach {
+            tasks.withType<Test>().configureEach {
+                extensions.findByType<JacocoTaskExtension>()?.destinationFile?.let { allExecData.from(it) }
+            }
+            val main = extensions.getByType<SourceSetContainer>().findByName("main") ?: return@configureEach
+            allSourceDirs.from(main.allSource.srcDirs)
+            allClassDirs.from(main.output.classesDirs.asFileTree.matching { exclude(excluded) })
+        }
+    }
+
+    classDirectories.setFrom(allClassDirs)
+    sourceDirectories.setFrom(allSourceDirs)
+    executionData.setFrom(allExecData)
+    reports { xml.required = true; html.required = true }
+}
+```
+
+**Tip — coverage a la vista en CI:** un task que parsea los XML de JaCoCo e imprime
+una tabla instruction/branch/line por módulo + total. Evita abrir el HTML para ver
+si bajó la cobertura.
+
+```kotlin title="build.gradle.kts (root)"
+tasks.register("jacocoLogCodeCoverage") {
+    group = JavaBasePlugin.VERIFICATION_GROUP
+    dependsOn("codeCoverageReport")
+    doLast {
+        // parse cada build/reports/jacoco/test/jacocoTestReport.xml,
+        // suma counters INSTRUCTION/BRANCH/LINE por módulo e imprime tabla + TOTAL
+    }
+}
+```
+
+```text
+------------------------------------------------------------------------------------------
+ JaCoCo Code Coverage Summary
+------------------------------------------------------------------------------------------
+  Module                         Instruction%      Branch%        Line%
+------------------------------------------------------------------------------------------
+  service-domain                       92.10%       84.00%       93.40%
+  service-application                  88.30%       79.10%       90.02%
+------------------------------------------------------------------------------------------
+  TOTAL                                90.44%       81.55%       91.71%
+------------------------------------------------------------------------------------------
+```
+
+## SonarCloud
+
+Apunta al reporte JaCoCo agregado; excluye tests, `config` y DTOs del cálculo.
+
+```kotlin title="build.gradle.kts (root)"
+val subprojectsReportPath =
+    subprojects.joinToString(",") { "$projectDir/${it.name}/build/reports/jacoco/test/jacocoTestReport.xml" }
+
+sonar {
+    properties {
+        property("sonar.projectKey", "codehunters-example-service")
+        property("sonar.organization", "codehunters")
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.token", System.getenv("SONAR_TOKEN") ?: "")
+        property("sonar.java.coveragePlugin", "jacoco")
+        property("sonar.coverage.jacoco.xmlReportPaths", subprojectsReportPath)
+        property("sonar.exclusions", "**/src/test/**,**/*Test.java,**/*IT.java")
+        property("sonar.coverage.exclusions", "**/config/**")
+        property("sonar.cpd.exclusions", "**/*Config*")
+    }
+}
+```
+
+**Tip:** `sonar.token` vía env var (`SONAR_TOKEN`), nunca en el repo. En CI se
+inyecta como secret.

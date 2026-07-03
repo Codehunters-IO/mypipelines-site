@@ -11,6 +11,7 @@ const strings = {
   // Navigation
   'nav.stacks': 'Stacks',
   'nav.actions': 'Actions',
+  'nav.gradle': 'Gradle',
   'nav.guides': 'Guías',
   'nav.reference': 'Referencia',
   'nav.search': 'Buscar',
@@ -18,6 +19,10 @@ const strings = {
   // Actions
   'actions.title': 'GitHub Actions',
   'actions.subtitle': 'Actions propias mantenidas por Codehunters',
+
+  // Gradle
+  'gradle.title': 'Gradle: uso y tips',
+  'gradle.subtitle': 'Cómo usamos Gradle Kotlin DSL en proyectos multi-módulo — convención, quality gates, packages y diagramas',
 
   // Catalog
   'catalog.title': 'Catálogo de pipelines',

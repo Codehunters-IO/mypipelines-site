@@ -37,4 +37,14 @@ const actions = defineCollection({
   }),
 });
 
-export const collections = { pipelines, guides, actions };
+const gradle = defineCollection({
+  loader: glob({ pattern: '**/*.mdx', base: './src/content/gradle' }),
+  schema: z.object({
+    title: z.string(),
+    slug: z.string(),
+    order: z.number().int().min(1),
+    description: z.string().max(200),
+  }),
+});
+
+export const collections = { pipelines, guides, actions, gradle };

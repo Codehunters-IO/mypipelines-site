@@ -1,0 +1,85 @@
+---
+title: "GitHub Packages: consumir y publicar SDKs"
+slug: "github-packages"
+order: 3
+description: "Consumir SDKs internos desde GitHub Packages con credenciales por env var, y publicar librerías con maven-publish."
+---
+
+# GitHub Packages: consumir y publicar SDKs
+
+Los SDKs internos (`codehunters-sdk-*`) se publican y consumen desde **GitHub
+Packages** (registry Maven). Credenciales siempre por env var, nunca en el repo.
+
+## Consumir
+
+Declarar el repo en `allprojects` con credenciales de entorno:
+
+```kotlin title="build.gradle.kts"
+allprojects {
+    repositories {
+        mavenCentral()
+        maven {
+            name = "GitHubPackages"
+            url = uri("${project.findProperty("github_packages_url")}/codehunters")
+            credentials {
+                username = System.getenv("GH_PACKAGES_USERNAME")
+                password = System.getenv("GH_PACKAGES_TOKEN")   // PAT con read:packages
+            }
+        }
+    }
+}
+```
+
+```properties title="gradle.properties"
+github_packages_url = https://maven.pkg.github.com/CODEHUNTERS
+```
+
+Luego se consume como cualquier dependencia, con versión pineada:
+
+```kotlin
+implementation("io.codehunters:codehunters-sdk-event-messaging:${property("sdk.event.messaging.version")}")
+```
+
+## Publicar un SDK
+
+En el repo del SDK, `maven-publish` apuntando al mismo registry:
+
+```kotlin title="build.gradle.kts (repo del SDK)"
+plugins {
+    `java-library`
+    `maven-publish`
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            groupId = "io.codehunters"
+            artifactId = "codehunters-sdk-event-messaging"
+            version = project.version.toString()
+            from(components["java"])
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/CODEHUNTERS/codehunters-sdk-event-messaging")
+            credentials {
+                username = System.getenv("GH_PACKAGES_USERNAME")
+                password = System.getenv("GH_PACKAGES_TOKEN")   // PAT con write:packages
+            }
+        }
+    }
+}
+```
+
+Publicar: `./gradlew publish`.
+
+## Tips
+
+- **Scopes del token:** consumir → `read:packages`; publicar → `write:packages`
+  (+ `read:packages`). En Actions, `GITHUB_TOKEN` alcanza para el mismo org.
+- **Limpieza de versiones viejas:** las versiones snapshot/pre-release se acumulan
+  en el registry — usá la action [Delete Package Versions](/actions/delete-package-versions)
+  para retención automática.
+- **No pinees en el build:** las versiones de SDK viven en `gradle.properties`
+  (`sdk.*.version`), un solo lugar para bumpear.

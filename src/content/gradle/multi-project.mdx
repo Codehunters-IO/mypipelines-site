@@ -1,0 +1,117 @@
+---
+title: "Multi-project & convención por subprojects"
+slug: "multi-project"
+order: 1
+description: "Estructura Gradle Kotlin DSL multi-módulo: allprojects/subprojects, Java 21, versiones pineadas en gradle.properties y repo GitHub Packages."
+---
+
+# Multi-project & convención por subprojects
+
+Setup real de un servicio multi-módulo (Spring Boot + Gradle Kotlin DSL). En vez
+de un `buildSrc`/convention-plugin, la convención se aplica en el root con
+`allprojects` (repos) y `subprojects` (plugins + deps compartidas).
+
+## Root `build.gradle.kts`
+
+```kotlin title="build.gradle.kts"
+plugins {
+    java
+    id("org.springframework.boot")
+    id("io.spring.dependency-management")
+    id("com.diffplug.spotless")
+    id("jacoco")
+    id("org.sonarqube")
+    id("io.gitlab.plunts.plantuml")
+}
+
+group = "io.codehunters"
+version = "0.0.1"
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+allprojects {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven {
+            name = "GitHubPackages"
+            url = uri("${project.findProperty("github_packages_url")}/codehunters")
+            credentials {
+                username = System.getenv("GH_PACKAGES_USERNAME")
+                password = System.getenv("GH_PACKAGES_TOKEN")
+            }
+        }
+    }
+}
+```
+
+## Convención compartida en `subprojects`
+
+Cada módulo hereda plugins, Java 21, deps base y el BOM de Spring — sin repetir
+config por módulo.
+
+```kotlin title="build.gradle.kts (subprojects)"
+subprojects {
+    apply(plugin = "java")
+    apply(plugin = "org.springframework.boot")
+    apply(plugin = "io.spring.dependency-management")
+    apply(plugin = "com.diffplug.spotless")
+    apply(plugin = "jacoco")
+    apply(plugin = "org.sonarqube")
+
+    java.sourceCompatibility = JavaVersion.VERSION_21
+
+    dependencies {
+        implementation("org.slf4j:slf4j-api")
+        implementation("org.mapstruct:mapstruct:${property("mapstruct.version")}")
+        compileOnly("org.projectlombok:lombok")
+        annotationProcessor("org.projectlombok:lombok")
+        annotationProcessor("org.mapstruct:mapstruct-processor:${property("mapstruct.version")}")
+
+        // SDKs internos publicados en GitHub Packages
+        implementation("io.codehunters:codehunters-sdk-tracing:${property("sdk.tracing.version")}")
+        implementation("io.codehunters:codehunters-sdk-event-messaging:${property("sdk.event.messaging.version")}")
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom("org.springframework.boot:spring-boot-dependencies:${property("spring.boot.version")}")
+            mavenBom("org.springframework.cloud:spring-cloud-dependencies:${property("spring.cloud.version")}")
+        }
+    }
+}
+```
+
+## Versiones pineadas en `gradle.properties`
+
+Nada de versiones hardcodeadas en el `build.gradle.kts`: todo por `property(...)`,
+centralizado. Facilita bumps y lectura.
+
+```properties title="gradle.properties"
+org.gradle.daemon = false
+
+spring.boot.version = 4.0.2
+spring.cloud.version = 2025.1.1
+spotless.plugin.version = 8.1.0
+sonarqube.plugin.version = 7.1.0.6387
+mapstruct.version = 1.6.0.Beta1
+
+# Test
+archunit.version = 1.3.0
+testcontainers.version = 1.20.4
+
+# SDKs internos
+sdk.tracing.version = 0.2.3
+sdk.event.messaging.version = 5.1.5
+
+# Tooling
+google.java.format.version = 1.17.0
+
+github_packages_url = https://maven.pkg.github.com/CODEHUNTERS
+```
+
+**Tip:** `org.gradle.daemon = false` en CI evita daemons colgados entre jobs; local
+podés dejarlo en `true`.

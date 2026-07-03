@@ -1,0 +1,105 @@
+---
+title: "Testing y diagramas de arquitectura"
+slug: "testing-and-diagrams"
+order: 4
+description: "JUnit 5 + JaCoCo encadenado, ArchUnit para boundaries, y generación de diagramas (PlantUML class/package, Structurizr C4) desde Gradle."
+---
+
+# Testing y diagramas de arquitectura
+
+## Testing
+
+JUnit Platform, cobertura encadenada al test, y logging de eventos.
+
+```kotlin title="build.gradle.kts (subprojects)"
+tasks.withType<Test> {
+    useJUnitPlatform()
+    finalizedBy("jacocoTestReport")
+}
+
+tasks.named<Test>("test") {
+    testLogging { events("passed", "skipped", "failed") }
+}
+```
+
+Dependencias de test — unit, ArchUnit para boundaries hexagonales, y libs de
+integración pineadas por `property(...)`:
+
+```kotlin title="build.gradle.kts (subprojects)"
+dependencies {
+    testImplementation("org.mockito:mockito-junit-jupiter")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine")
+    testImplementation("com.tngtech.archunit:archunit-junit5:${property("archunit.version")}")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+```
+
+```properties title="gradle.properties"
+archunit.version = 1.3.0
+testcontainers.version = 1.20.4
+wiremock.version = 3.6.0
+karate.version = 1.5.0
+```
+
+**Tip:** ArchUnit corre como test normal (`archunit-junit5`) — los boundaries
+(domain sin framework, dependencias apuntando hacia adentro) se validan en el
+mismo `./gradlew test`, sin paso extra en CI.
+
+## Diagramas desde Gradle
+
+### PlantUML (class / package)
+
+El plugin `plunts.plantuml` genera diagramas por módulo desde el bytecode:
+
+```kotlin title="build.gradle.kts (subprojects)"
+classDiagrams {
+    diagram {
+        name("${project.name} Class Diagram")
+        include(packages().withName("io.codehunters"))
+        writeTo(file("$rootDir/architecture/diagrams/${project.name}-class-diagram.puml"))
+        renderTo(file("$rootDir/architecture/diagrams/${project.name}-class-diagram.svg"))
+    }
+    packageDiagram {
+        name("${project.name} Packages Diagram")
+        include(packages().withName("io.codehunters"))
+        writeTo(file("$rootDir/architecture/diagrams/${project.name}-packages-diagram.puml"))
+        renderTo(file("$rootDir/architecture/diagrams/${project.name}-packages-diagram.svg"))
+    }
+}
+```
+
+### Structurizr C4 (task custom)
+
+Una configuración dedicada + un `JavaExec` exportan el workspace Structurizr a
+PlantUML/Mermaid. Buen patrón para tooling que no debe contaminar el classpath
+del proyecto:
+
+```kotlin title="build.gradle.kts (root)"
+val structurizr: Configuration by configurations.creating {
+    isCanBeResolved = true
+    isCanBeConsumed = false
+}
+dependencies {
+    structurizr("com.structurizr:structurizr-dsl:${property("structurizr.version")}")
+    structurizr("com.structurizr:structurizr-export:${property("structurizr.version")}")
+}
+
+val compileStructurizrExporter by tasks.registering(JavaCompile::class) {
+    source = fileTree("$rootDir/architecture/structurizr/src")
+    classpath = structurizr
+    destinationDirectory.set(layout.buildDirectory.dir("structurizr-classes"))
+    sourceCompatibility = "21"; targetCompatibility = "21"
+}
+
+tasks.register<JavaExec>("structurizrExport") {
+    description = "Exports Structurizr C4 diagrams to PlantUML and Mermaid"
+    group = "documentation"
+    dependsOn(compileStructurizrExporter)
+    classpath = files(compileStructurizrExporter.get().destinationDirectory) + structurizr
+    mainClass.set("structurizr.StructurizrExporter")
+    args = listOf("$rootDir/architecture/structurizr/workspace.dsl", "$rootDir/architecture/structurizr/export")
+}
+```
+
+**Tip:** una `Configuration` aislada (`isCanBeConsumed = false`) mantiene las deps
+de tooling fuera del `implementation`/`runtimeClasspath` del artefacto.
