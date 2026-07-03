@@ -26,11 +26,14 @@ const year = new Date().getFullYear();
         <p class="mt-2 text-sm text-[var(--fg-muted)]">{t(lang, 'footer.tagline')}</p>
       </div>
 
-      <nav class="flex flex-col gap-2 text-sm" aria-label="Footer">
-        <a href={guidesHref} class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">{t(lang, 'footer.guides')}</a>
+      <nav class="grid grid-cols-2 gap-x-8 gap-y-2 text-sm" aria-label="Footer">
+        <a href="/actions" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">{t(lang, 'nav.actions')}</a>
         <a href={REPO_URL} target="_blank" rel="noopener" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">{t(lang, 'footer.repo')}</a>
+        <a href="/gradle" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">{t(lang, 'nav.gradle')}</a>
         <a href={GITHUB_URL} target="_blank" rel="noopener" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">GitHub</a>
+        <a href={guidesHref} class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">{t(lang, 'footer.guides')}</a>
         <a href={LINKEDIN_URL} target="_blank" rel="noopener" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">LinkedIn</a>
+        <a href="/reference/rulesets" class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded">{t(lang, 'nav.reference')}</a>
       </nav>
     </div>
 

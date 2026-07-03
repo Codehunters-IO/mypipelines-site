@@ -37,5 +37,23 @@ const counts = Object.fromEntries(
         </a>
       ))}
     </section>
+
+    <section class="mt-16">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-[var(--fg-subtle)]">Explorá también</h2>
+      <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {[
+          { href: '/actions', title: 'Actions', desc: 'GitHub Actions propias de Codehunters' },
+          { href: '/gradle', title: 'Gradle', desc: 'Uso, tips y ejemplos multi-módulo' },
+          { href: '/guides/quick-start', title: 'Guías', desc: 'GitFlow, adopción y deploy targets' },
+          { href: '/reference/rulesets', title: 'Referencia', desc: 'Rulesets y CODEOWNERS' },
+        ].map((c) => (
+          <a href={c.href}
+             class="rounded-lg border border-[var(--border-subtle)] surface p-5 hover:border-brand-500 transition-colors">
+            <h3 class="font-semibold text-[var(--fg)]">{c.title}</h3>
+            <p class="mt-1 text-sm text-[var(--fg-muted)]">{c.desc}</p>
+          </a>
+        ))}
+      </div>
+    </section>
   </main>
 </BaseLayout>
