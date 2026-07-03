@@ -9,7 +9,7 @@ const strings = {
   'home.title': 'mypipelines',
 
   // Navigation
-  'nav.stacks': 'Stacks',
+  'nav.pipelines': 'Pipelines',
   'nav.actions': 'Actions',
   'nav.gradle': 'Gradle',
   'nav.guides': 'Guías',
