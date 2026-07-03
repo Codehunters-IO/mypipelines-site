@@ -3,6 +3,7 @@ import { getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PipelineCard from '../../components/PipelineCard.astro';
 import { STACK_ORDER, STACK_LABELS, KIND_ORDER, KIND_LABELS } from '../../lib/stacks';
+import { KRAKEND_PLUGINS, KRAKEND_REPO } from '../../lib/krakend-plugins';
 import { defaultLocale } from '../../i18n/ui';
 
 export async function getStaticPaths() {
@@ -30,5 +31,35 @@ const lang = defaultLocale;
         </div>
       </section>
     ))}
+
+    {stack === 'krakend' && (
+      <section class="mt-12 border-t border-[var(--border-subtle)] pt-8">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 class="text-2xl font-bold text-[var(--fg)]">Plugins Go (edge)</h2>
+          <a href={KRAKEND_REPO} target="_blank" rel="noopener"
+             class="text-sm text-brand-600 dark:text-brand-400 hover:underline">Codehunters-IO/krakend-gateway ↗</a>
+        </div>
+        <p class="mt-2 text-[var(--fg-muted)]">Plugins Go propios que corren en el gateway KrakenD (AuthN, tracing, i18n, geo-IP).</p>
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {KRAKEND_PLUGINS.map((p) => (
+            <a href={`${KRAKEND_REPO}/tree/main/plugins/${p.name}`} target="_blank" rel="noopener"
+               class="block rounded-lg border border-[var(--border-subtle)] surface p-4 hover:border-brand-500 transition-colors">
+              <div class="flex items-center gap-2">
+                <h3 class="font-semibold text-[var(--fg)]">{p.title}</h3>
+                <code class="text-xs text-[var(--fg-muted)]">{p.registered}</code>
+              </div>
+              <p class="mt-1 text-sm text-[var(--fg-muted)]">{p.description}</p>
+              {p.config.length > 0 && (
+                <p class="mt-2 flex flex-wrap gap-1">
+                  {p.config.map((c) => (
+                    <code class="text-xs rounded bg-brand-500/10 px-1.5 py-0.5 text-brand-600 dark:text-brand-400">{c}</code>
+                  ))}
+                </p>
+              )}
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
   </main>
 </BaseLayout>
