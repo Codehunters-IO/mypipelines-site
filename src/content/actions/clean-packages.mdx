@@ -1,0 +1,75 @@
+---
+title: "Clean Packages"
+slug: "clean-packages"
+order: 2
+description: "GitHub Action propia (Codehunters IO) que borra versiones viejas de GitHub Packages conservando las N más recientes por paquete. Node 20."
+repo: "https://github.com/andresmontoyat/codehuntersio-java-commons-support/tree/main/.github/actions/packages"
+---
+
+# Clean Packages
+
+GitHub Action propia mantenida por Codehunters IO. Borra versiones viejas de
+GitHub Packages de un usuario u organización, conservando las **N más recientes**
+por paquete. Runtime Node 20. Action repo-local (`uses: ./.github/actions/packages`).
+
+Vive en el repo [`codehuntersio-java-commons-support`](https://github.com/andresmontoyat/codehuntersio-java-commons-support),
+donde limpia las versiones publicadas de los módulos `commons-*`.
+
+## Scopes del token
+
+El `token` debe incluir `read:packages` + `delete:packages`. Para paquetes de
+organización, el dueño del token necesita permiso `admin` sobre el paquete
+(o ser admin del org).
+
+## Inputs
+
+| Input | Requerido | Default | Descripción |
+|-------|-----------|---------|-------------|
+| `token` | sí | — | PAT con `read:packages` + `delete:packages` |
+| `owner` | sí | — | Usuario u org dueño de los paquetes |
+| `packageNames` | sí | — | Lista coma-separada de nombres de paquete |
+| `versions` | sí | — | Cantidad de versiones más recientes a **conservar** (entero `>= 0`) |
+| `ownerType` | no | `user` | `user` u `org` |
+| `packageType` | no | `maven` | `maven` · `npm` · `container` · `rubygems` · `nuget` · `docker` |
+
+## Outputs
+
+| Output | Descripción |
+|--------|-------------|
+| `deletedCount` | Total de versiones borradas |
+| `packagesProcessed` | Cantidad de paquetes procesados |
+
+## Uso
+
+```yaml title=".github/workflows/clean-packages.yml"
+- name: Clean old Maven package versions
+  uses: ./.github/actions/packages
+  with:
+    token: ${{ secrets.GH_PACKAGES_TOKEN }}
+    owner: ${{ github.repository_owner }}
+    ownerType: user
+    packageType: maven
+    versions: 5
+    packageNames: >-
+      io.codehunters.commons.commons-util,
+      io.codehunters.commons.commons-dto,
+      io.codehunters.commons.commons-web
+```
+
+## Comportamiento
+
+- Las versiones se listan de más nueva a más vieja; se conservan las primeras
+  `versions`, el resto se borra.
+- Paquetes con menos versiones que `versions` se saltan.
+- El borrado corre secuencial por paquete; un fallo aborta la corrida.
+
+## Clean Packages vs Delete Package Versions
+
+Ambas borran versiones de GitHub Packages. Diferencias:
+
+| | Clean Packages | [Delete Package Versions](/actions/delete-package-versions) |
+|---|---|---|
+| Origen | Repo-local (Codehunters) | Fork publicado (`@v1`) |
+| Contrato | Retención simple (`versions` = keep N) | Rico: pre-release, untagged, ids, regex |
+| Multi-paquete | Sí (`packageNames` lista) | Un paquete por corrida |
+| Outputs | `deletedCount`, `packagesProcessed` | — |

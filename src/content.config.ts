@@ -26,4 +26,15 @@ const guides = defineCollection({
   }),
 });
 
-export const collections = { pipelines, guides };
+const actions = defineCollection({
+  loader: glob({ pattern: '**/*.mdx', base: './src/content/actions' }),
+  schema: z.object({
+    title: z.string(),
+    slug: z.string(),
+    order: z.number().int().min(1),
+    description: z.string().max(200),
+    repo: z.string().url(),
+  }),
+});
+
+export const collections = { pipelines, guides, actions };

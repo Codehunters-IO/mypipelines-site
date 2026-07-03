@@ -1,0 +1,66 @@
+---
+title: "Delete Package Versions"
+slug: "delete-package-versions"
+order: 1
+description: "GitHub Action para borrar versiones de un paquete en GitHub Packages (npm, container, maven, nuget, rubygems). Fork modernizado, drop-in del oficial."
+repo: "https://github.com/andresmontoyat/delete-package-versions"
+---
+
+# Delete Package Versions
+
+GitHub Action que borra versiones de un paquete en [GitHub Packages](https://github.com/features/packages)
+— `npm`, `container`, `maven`, `nuget`, `rubygems`. Hasta 100 versiones por corrida.
+
+Fork mantenido de [`actions/delete-package-versions`](https://github.com/actions/delete-package-versions)
+(upstream dejó de aceptar contribuciones). Contrato de la action **sin cambios** — drop-in replacement.
+
+## Capacidades
+
+- Retención: mantener las N versiones más recientes, borrar el resto
+- Borrar las N versiones más viejas
+- Mantener sólo N pre-releases (política de pre-release)
+- Ignorar versiones por regex
+- Borrar sólo versiones untagged (container)
+- Borrar por id específico, o de un paquete en otro repo (con PAT)
+
+## Uso
+
+```yaml title=".github/workflows/cleanup-packages.yml"
+- uses: andresmontoyat/delete-package-versions@v1
+  with:
+    package-name: 'mi-servicio'
+    package-type: 'container'
+    min-versions-to-keep: 10        # conserva las 10 más recientes
+    delete-only-untagged-versions: true
+```
+
+## Inputs
+
+| Input | Requerido | Default | Descripción |
+|-------|-----------|---------|-------------|
+| `package-name` | sí | — | Nombre del paquete |
+| `package-type` | sí | — | `container` · `maven` · `npm` · `nuget` · `rubygems` |
+| `owner` | no | repo owner | Dueño del repo del paquete |
+| `package-version-ids` | no | — | Lista de ids de versión (coma-separada) |
+| `num-old-versions-to-delete` | no | `1` | Cantidad de versiones más viejas a borrar |
+| `min-versions-to-keep` | no | `-1` | Versiones recientes a conservar (`0` = borrar todas; tiene precedencia sobre `num-old-versions-to-delete`) |
+| `ignore-versions` | no | `^$` | Regex de versiones a excluir |
+| `delete-only-pre-release-versions` | no | `false` | Sólo pre-releases (excluye `num-old-*` e `ignore-versions`) |
+| `delete-only-untagged-versions` | no | `false` | Sólo untagged, container (excluye `num-old-*`) |
+| `token` | no | `github.token` | Token con scope para borrar; PAT si el paquete está fuera del repo |
+
+**Scopes del token:** con `package-version-ids` → `delete:packages`; sin él → `delete:packages` + `read:packages`.
+
+## Qué modernizamos (fork)
+
+| Área | Upstream | Este fork |
+|------|----------|-----------|
+| Modelo async | RxJS 7 Observables | `async`/`await` nativo + `Promise.allSettled` |
+| Estado global | Contador mutable a nivel módulo | Eliminado — `DeleteSummary` por llamada |
+| `Input` | Cargaba `numDeleted` runtime | Input puro, sin estado runtime |
+| ESLint | 8.x legacy | 9.x flat config |
+| TypeScript | Sin pin | `^5.6` strict mode completo |
+| MSW (tests) | 1.x | 2.x (`http` / `HttpResponse`) |
+| Errores | Casts sueltos | `extractApiError()` tipado |
+| CI | Workflow único, `checkout@v2` | Matrix node 20/22 + `check-dist` modernizado |
+| Runtime | — | Node 20, GHES-compatible |

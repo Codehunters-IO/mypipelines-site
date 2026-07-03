@@ -1,0 +1,27 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { defaultLocale, t } from '../../i18n/ui';
+
+const lang = defaultLocale;
+const entries = (await getCollection('actions')).sort(
+  (a, b) => a.data.order - b.data.order || a.data.slug.localeCompare(b.data.slug)
+);
+---
+<BaseLayout title={t(lang, 'nav.actions')} lang={lang}>
+  <main class="mx-auto max-w-4xl px-4 py-10">
+    <header class="mb-8 border-b border-[var(--border-subtle)] pb-6">
+      <h1 class="text-fluid-h1 font-bold tracking-tight text-[var(--fg)]">{t(lang, 'actions.title')}</h1>
+      <p class="mt-2 text-[var(--fg-muted)]">{t(lang, 'actions.subtitle')}</p>
+    </header>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {entries.map((entry) => (
+        <a href={`/actions/${entry.data.slug}`}
+           class="block rounded-lg border border-[var(--border-subtle)] surface p-5 hover:border-brand-500 transition-colors">
+          <h2 class="font-semibold text-[var(--fg)]">{entry.data.title}</h2>
+          <p class="mt-1 text-sm text-[var(--fg-muted)] line-clamp-3">{entry.data.description}</p>
+        </a>
+      ))}
+    </div>
+  </main>
+</BaseLayout>

@@ -10,9 +10,14 @@ const strings = {
 
   // Navigation
   'nav.stacks': 'Stacks',
+  'nav.actions': 'Actions',
   'nav.guides': 'Guías',
   'nav.reference': 'Referencia',
   'nav.search': 'Buscar',
+
+  // Actions
+  'actions.title': 'GitHub Actions',
+  'actions.subtitle': 'Actions propias mantenidas por Codehunters',
 
   // Catalog
   'catalog.title': 'Catálogo de pipelines',
