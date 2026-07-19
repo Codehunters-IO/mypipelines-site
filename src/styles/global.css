@@ -21,6 +21,7 @@
   --color-brand-400: oklch(0.71 0.16 293);
   --color-brand-500: oklch(0.61 0.21 293);
   --color-brand-600: oklch(0.54 0.24 293);
+  --color-brand-glow: oklch(0.61 0.21 293 / 35%);
 
   /* Fluid type scale (clamp: mobile → desktop) */
   --text-fluid-h1: clamp(2.25rem, 1.6rem + 3.2vw, 3.5rem);
@@ -30,6 +31,11 @@
   /* Elevation scale (consistent shadows: card / sticky / overlay) */
   --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
   --shadow-raised: 0 4px 12px -2px rgba(15, 23, 42, 0.10), 0 2px 6px -2px rgba(15, 23, 42, 0.06);
+
+  /* Motion (subtle micro-interactions only — no entrance/decorative animation) */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
 }
 
 /* ── Surface + foreground tiers (semantic, light/dark) ───────────────────── */
@@ -59,6 +65,11 @@
   }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
   }
   body {
     font-family: var(--font-sans);
