@@ -15,7 +15,7 @@ const rendered = await Promise.all(refs.map(async (e) => ({ d: e.data, Content: 
       <section class="mt-8">
         <h2 class="text-2xl font-semibold tracking-[-0.02em] text-[var(--fg)]">{d.title}</h2>
         <p class="text-sm text-[var(--fg-muted)]">{d.description}</p>
-        <article class="prose prose-slate dark:prose-invert max-w-none mt-2"><Content /></article>
+        <article class="prose max-w-none mt-2"><Content /></article>
       </section>
     ))}
   </main>
