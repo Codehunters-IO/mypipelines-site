@@ -18,19 +18,6 @@ const { title, lang = 'es' } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- ⚠️ INLINE BLOCKING THEME DETECTION — must be BEFORE any <link rel="stylesheet"> -->
-    <!-- Source: Astro docs/guides/view-transitions § dark mode + RESEARCH Pitfall 4 -->
-    <script is:inline>
-      (function () {
-        const stored = localStorage.getItem('theme');
-        const isDark =
-          stored === 'dark' ||
-          (stored === null &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (isDark) document.documentElement.classList.add('dark');
-      })();
-    </script>
-
     <title>{title}</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <slot name="head" />
@@ -38,7 +25,7 @@ const { title, lang = 'es' } = Astro.props;
   <body class="flex min-h-dvh flex-col">
     <a
       href="#main"
-      class="sr-only focus:not-sr-only focus:absolute focus:left-0 focus:top-0 focus:z-[100] focus:m-2 focus:rounded focus:bg-brand-600 focus:px-3 focus:py-2 focus:text-white"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-0 focus:top-0 focus:z-[100] focus:m-2 focus:bg-[var(--fg)] focus:px-3 focus:py-2 focus:text-[var(--surface)]"
     >
       {t(lang, 'a11y.skipToContent')}
     </a>
