@@ -5,11 +5,10 @@ interface Props { entry: CollectionEntry<'pipelines'>; }
 const { entry } = Astro.props;
 const d = entry.data;
 ---
-<a href={`/pipelines/${d.slug}`}
-   class="block rounded-lg border border-[var(--border-subtle)] surface p-4 shadow-card transition-[transform,box-shadow,border-color] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-raised">
-  <div class="flex items-center gap-2 mb-1">
+<a href={`/pipelines/${d.slug}`} class="term-box block">
+  <div class="mb-1 flex items-center gap-2">
     <span class="text-xs font-mono text-[var(--fg-muted)]">{KIND_LABELS[d.kind]}</span>
-    <span class="text-xs rounded bg-brand-500/10 px-1.5 py-0.5 text-brand-600 shadow-[0_0_12px_var(--color-brand-glow)] dark:text-brand-400">{TYPE_LABELS[d.type] ?? d.type}</span>
+    <span class="term-tag">{TYPE_LABELS[d.type] ?? d.type}</span>
   </div>
   <h3 class="font-semibold text-[var(--fg)]">{d.title}</h3>
   <p class="mt-1 text-sm text-[var(--fg-muted)] line-clamp-2">{d.description}</p>
