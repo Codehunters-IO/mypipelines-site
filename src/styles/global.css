@@ -36,20 +36,20 @@
 :root {
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-sunken: #f8fafc;        /* slate-50  */
+  --surface-sunken: #f8f7fc;        /* violet-tinted slate-50 */
   --border-subtle: #e2e8f0;         /* slate-200 */
   --fg: #0f172a;                    /* slate-900 */
   --fg-muted: #475569;              /* slate-600 */
   --fg-subtle: #94a3b8;             /* slate-400 */
 }
 .dark {
-  --surface: #0f172a;              /* slate-900 */
-  --surface-raised: #1e293b;       /* slate-800 */
-  --surface-sunken: #020617;       /* slate-950 */
-  --border-subtle: #334155;        /* slate-700 */
-  --fg: #f1f5f9;                   /* slate-100 */
-  --fg-muted: #cbd5e1;             /* slate-300 */
-  --fg-subtle: #94a3b8;            /* slate-400 */
+  --surface: #0b0f1a;              /* near-black, violet-tinted */
+  --surface-raised: #171227;       /* card/header — indigo-violet tint */
+  --surface-sunken: #05060c;       /* deepest well */
+  --border-subtle: rgba(255, 255, 255, 0.08);  /* translucent, was solid slate-700 */
+  --fg: #f4f2fb;                   /* slight violet-white */
+  --fg-muted: #b8b3c9;
+  --fg-subtle: #8b869c;
 }
 
 /* ── Base layer ──────────────────────────────────────────────────────────── */
