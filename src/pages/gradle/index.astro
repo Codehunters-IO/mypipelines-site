@@ -17,8 +17,7 @@ const entries = (await getCollection('gradle')).sort(
     <ol class="space-y-3">
       {entries.map((entry) => (
         <li>
-          <a href={`/gradle/${entry.data.slug}`}
-             class="block rounded-lg border border-[var(--border-subtle)] surface p-5 hover:border-brand-500 transition-colors">
+          <a href={`/gradle/${entry.data.slug}`} class="term-card">
             <h2 class="font-semibold text-[var(--fg)]">{entry.data.title}</h2>
             <p class="mt-1 text-sm text-[var(--fg-muted)]">{entry.data.description}</p>
           </a>
